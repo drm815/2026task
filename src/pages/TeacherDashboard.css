@@ -1,0 +1,120 @@
+.teacher-dashboard {
+    padding: 20px 0;
+}
+
+.admin-header {
+    margin-bottom: 40px;
+    text-align: left;
+}
+
+.admin-header h2 {
+    font-size: 2.8rem;
+    color: #444;
+    font-weight: 800;
+    margin-bottom: 10px;
+}
+
+.admin-header p {
+    color: #999;
+    font-size: 1.1rem;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+}
+
+.p-6 {
+    padding: 32px;
+}
+
+h3 {
+    margin-bottom: 24px;
+    color: #f06292;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.input-group textarea {
+    min-height: 140px;
+    resize: vertical;
+}
+
+.w-full {
+    width: 100%;
+}
+
+.assessment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.assessment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #fce4ec;
+    transition: transform 0.2s ease;
+}
+
+.assessment-item:hover {
+    transform: scale(1.02);
+}
+
+.assessment-item h4 {
+    color: #555;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.status-badge {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.status-badge.public {
+    background: #e8f5e9;
+    color: #4caf50;
+}
+
+.status-badge.private {
+    background: #ffebee;
+    color: #f44336;
+}
+
+.actions button {
+    background: var(--bg-sub);
+    color: #f06292;
+    border: 1px solid #fce4ec;
+    padding: 10px 16px;
+    border-radius: 10px;
+    margin-left: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.actions button:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+@media (max-width: 900px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
