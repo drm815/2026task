@@ -93,7 +93,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
     const [deadline, setDeadline] = useState(item.Deadline ? new Date(item.Deadline).toISOString().slice(0, 16) : '');
 
     let parsedQuestions = [];
-    try { parsedQuestions = item.Questions ? JSON.parse(item.Questions) : []; } catch {}
+    try { parsedQuestions = item.Questions ? JSON.parse(item.Questions) : []; } catch { }
 
     const [editForm, setEditForm] = useState({
         title: item.Title || '',
@@ -206,15 +206,15 @@ const ScoreRow = ({ submission: s, onSave, assessmentType }) => {
             <td>{s.Class}</td>
             <td>{s.Number}</td>
             <td>{s.Name}</td>
-            <td style={{ maxWidth: '200px', wordBreak: 'break-all' }}>
+            <td className="content-cell">
                 {assessmentType === '파일 업로드'
-                    ? (s.FileURL ? <a href={s.FileURL} target="_blank" rel="noreferrer">파일 보기</a> : '-')
+                    ? (s.FileURL ? <a href={s.FileURL} target="_blank" rel="noreferrer" className="file-link">파일 보기</a> : '-')
                     : s.Content}
             </td>
             <td>
-                <input type="number" value={score} onChange={e => setScore(e.target.value)} style={{ width: '60px' }} />
+                <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
             </td>
-            <td><button onClick={() => onSave(s, score)}>저장</button></td>
+            <td><button onClick={() => onSave(s, score)} className="save-btn">저장</button></td>
         </tr>
     );
 };
@@ -443,38 +443,38 @@ const TeacherDashboard = () => {
                     <div className="assessment-list">
                         {isLoading ? <p className="empty-msg">불러오는 중...</p>
                             : assessments.length === 0 ? <p className="empty-msg">등록된 평가가 없습니다.</p>
-                            : (() => {
-                                // 학년별 그룹핑: 학년 미지정은 '전체' 그룹
-                                const groups = {};
-                                assessments.forEach(item => {
-                                    const gs = item.Grades ? String(item.Grades).split(',').filter(Boolean) : [];
-                                    const keys = gs.length > 0 ? gs.map(g => `${g}학년`) : ['전체'];
-                                    keys.forEach(k => {
-                                        if (!groups[k]) groups[k] = [];
-                                        groups[k].push(item);
+                                : (() => {
+                                    // 학년별 그룹핑: 학년 미지정은 '전체' 그룹
+                                    const groups = {};
+                                    assessments.forEach(item => {
+                                        const gs = item.Grades ? String(item.Grades).split(',').filter(Boolean) : [];
+                                        const keys = gs.length > 0 ? gs.map(g => `${g}학년`) : ['전체'];
+                                        keys.forEach(k => {
+                                            if (!groups[k]) groups[k] = [];
+                                            groups[k].push(item);
+                                        });
                                     });
-                                });
-                                const sortedKeys = Object.keys(groups).sort((a, b) => {
-                                    if (a === '전체') return 1;
-                                    if (b === '전체') return -1;
-                                    return parseInt(a) - parseInt(b);
-                                });
-                                return sortedKeys.map(grade => (
-                                    <div key={grade}>
-                                        <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#1a73e8', borderBottom: '2px solid #1a73e8', padding: '0.25rem 0', marginBottom: '0.5rem', marginTop: '0.75rem' }}>
-                                            {grade}
+                                    const sortedKeys = Object.keys(groups).sort((a, b) => {
+                                        if (a === '전체') return 1;
+                                        if (b === '전체') return -1;
+                                        return parseInt(a) - parseInt(b);
+                                    });
+                                    return sortedKeys.map(grade => (
+                                        <div key={grade}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#1a73e8', borderBottom: '2px solid #1a73e8', padding: '0.25rem 0', marginBottom: '0.5rem', marginTop: '0.75rem' }}>
+                                                {grade}
+                                            </div>
+                                            {groups[grade].map(item => (
+                                                <AssessmentItem key={item.ID} item={item}
+                                                    onGrade={() => fetchSubmissions(item)}
+                                                    onUpdateDeadline={handleUpdateDeadline}
+                                                    onUpdate={handleUpdate}
+                                                    onDelete={handleDelete}
+                                                    onToggleVisibility={handleToggleVisibility} />
+                                            ))}
                                         </div>
-                                        {groups[grade].map(item => (
-                                            <AssessmentItem key={item.ID} item={item}
-                                                onGrade={() => fetchSubmissions(item)}
-                                                onUpdateDeadline={handleUpdateDeadline}
-                                                onUpdate={handleUpdate}
-                                                onDelete={handleDelete}
-                                                onToggleVisibility={handleToggleVisibility} />
-                                        ))}
-                                    </div>
-                                ));
-                            })()
+                                    ));
+                                })()
                         }
                     </div>
                 </div>
@@ -491,18 +491,28 @@ const TeacherDashboard = () => {
                     </div>
                     {isLoading ? <p className="empty-msg">불러오는 중...</p>
                         : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
-                        : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead>
-                                    <tr><th>학년</th><th>반</th><th>번호</th><th>이름</th><th>내용/파일</th><th>점수</th><th>저장</th></tr>
-                                </thead>
-                                <tbody>
-                                    {submissions.map((s, i) => (
-                                        <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type} />
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
+                            : (
+                                <div className="table-container">
+                                    <table className="grading-table">
+                                        <thead>
+                                            <tr>
+                                                <th>학년</th>
+                                                <th>반</th>
+                                                <th>번호</th>
+                                                <th>이름</th>
+                                                <th className="content-col">내용/파일</th>
+                                                <th>점수</th>
+                                                <th>저장</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {submissions.map((s, i) => (
+                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type} />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                 </div>
             )}
         </div>

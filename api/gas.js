@@ -12,10 +12,12 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
       // GAS POST → 302 리다이렉트 → 최종 URL을 GET으로 요청해야 응답 받음
+      // req.body가 이미 파싱된 객체일 수 있으므로 stringify
+      const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       const gasRes = await fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body),
+        body: bodyStr,
         redirect: 'manual',
       });
       const finalUrl = gasRes.headers.get('location');

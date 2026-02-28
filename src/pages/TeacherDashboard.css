@@ -118,3 +118,86 @@ h3 {
         grid-template-columns: 1fr;
     }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   채점 테이블 정렬 시스템 (최종 수정)
+   ────────────────────────────────────────────────────────────────────────── */
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 2rem;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #fce4ec;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.grading-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.grading-table th,
+.grading-table td {
+    padding: 16px;
+    text-align: center;
+    /* 핵심: 헤더와 데이터 모두 중앙 정렬 */
+    vertical-align: middle;
+    border-bottom: 1px solid #fce4ec;
+    color: #555;
+}
+
+.grading-table th {
+    background: #fff8f9;
+    color: #f06292;
+    font-weight: 800;
+    font-size: 0.95rem;
+}
+
+.grading-table tr:hover {
+    background: #fffcfd;
+}
+
+.content-col {
+    width: 40%;
+}
+
+.content-cell {
+    word-break: break-all;
+    line-height: 1.5;
+    text-align: center !important;
+}
+
+.score-input {
+    width: 80px !important;
+    text-align: center;
+    padding: 8px !important;
+    margin: 0 auto;
+    display: block;
+}
+
+.save-btn {
+    background: #f06292 !important;
+    color: white !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 10px !important;
+    font-weight: 700;
+    width: auto;
+    margin: 0 auto;
+}
+
+.save-btn:hover {
+    background: #ec407a !important;
+}
+
+.file-link {
+    color: #f06292;
+    text-decoration: none;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: #fff0f3;
+    border-radius: 6px;
+}
