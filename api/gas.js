@@ -11,14 +11,21 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      // 파일 업로드: POST body를 GAS에 POST로 전달
+      // GAS는 POST도 302 리다이렉트 → manual로 받아서 최종 URL에 다시 POST
+      const bodyStr = JSON.stringify(req.body);
       const gasRes = await fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body),
-        redirect: 'follow',
+        body: bodyStr,
+        redirect: 'manual',
       });
-      const text = await gasRes.text();
+      const finalUrl = gasRes.headers.get('location') || GAS_URL;
+      const finalRes = await fetch(finalUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyStr,
+      });
+      const text = await finalRes.text();
       try {
         res.status(200).json(JSON.parse(text));
       } catch {
