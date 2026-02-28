@@ -11,20 +11,21 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      // GAS는 POST도 302 리다이렉트 → manual로 받아서 최종 URL에 다시 POST
-      const bodyStr = JSON.stringify(req.body);
+      // GAS POST → 302 리다이렉트 → 최종 URL을 GET으로 요청해야 응답 받음
       const gasRes = await fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: bodyStr,
+        body: JSON.stringify(req.body),
         redirect: 'manual',
       });
-      const finalUrl = gasRes.headers.get('location') || GAS_URL;
-      const finalRes = await fetch(finalUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: bodyStr,
-      });
+      const finalUrl = gasRes.headers.get('location');
+      if (!finalUrl) {
+        const text = await gasRes.text();
+        try { res.status(200).json(JSON.parse(text)); }
+        catch { res.status(200).json({ status: 'error', message: text }); }
+        return;
+      }
+      const finalRes = await fetch(finalUrl);
       const text = await finalRes.text();
       try {
         res.status(200).json(JSON.parse(text));
