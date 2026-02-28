@@ -16,8 +16,10 @@ function doGet(e) {
     if (action === 'createAssessment') return handleCreateAssessment(p);
     if (action === 'toggleVisibility') return handleToggleVisibility(p);
     if (action === 'updateDeadline')   return handleUpdateDeadline(p);
-    if (action === 'updateAssessment') return handleUpdateAssessment(p);
-    if (action === 'deleteAssessment') return handleDeleteAssessment(p);
+    if (action === 'updateAssessment')   return handleUpdateAssessment(p);
+    if (action === 'deleteAssessment')   return handleDeleteAssessment(p);
+    if (action === 'toggleScorePublic')  return handleToggleScorePublic(p);
+    if (action === 'getMyScores')        return handleGetMyScores(p);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
@@ -275,6 +277,48 @@ function handleToggleVisibility(p) {
     }
   }
   return createResponse({ status: 'error' });
+}
+
+function handleToggleScorePublic(p) {
+  if (!isValidGrade(p.grade))       return createResponse({ status: 'error', message: 'Invalid grade' });
+  if (!isValidClass(p.class))       return createResponse({ status: 'error', message: 'Invalid class' });
+  if (!isValidNumber(p.number))     return createResponse({ status: 'error', message: 'Invalid number' });
+  if (!isValidUuid(p.assessmentID)) return createResponse({ status: 'error', message: 'Invalid assessmentID' });
+  var isPublic = p.isPublic === 'true';
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return createResponse({ status: 'error', message: 'No data sheet' });
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][1] == p.grade && rows[i][2] == p.class &&
+        rows[i][3] == p.number && rows[i][5] == p.assessmentID) {
+      sheet.getRange(i + 1, 10).setValue(isPublic);
+      return createResponse({ status: 'success' });
+    }
+  }
+  return createResponse({ status: 'error', message: 'Submission not found' });
+}
+
+function handleGetMyScores(p) {
+  if (!isValidGrade(p.grade))   return createResponse({ status: 'error', message: 'Invalid grade' });
+  if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
+  if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
+  if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return createResponse([]);
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][1] == p.grade && rows[i][2] == p.class &&
+        rows[i][3] == p.number && rows[i][9] === true) {
+      var obj = {};
+      headers.forEach(function(h, j) { obj[h] = rows[i][j]; });
+      result.push(obj);
+    }
+  }
+  return createResponse(result);
 }
 
 function getOrCreateFolder(name, parent) {

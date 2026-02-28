@@ -56,9 +56,11 @@ const StudentPortal = () => {
     const [answers, setAnswers] = useState({});         // { questionIndex: value }
     const [file, setFile] = useState(null);
     const [submitMsg, setSubmitMsg] = useState('');
+    const [myScores, setMyScores] = useState([]);
 
     useEffect(() => {
         if (!isLoggedIn) return;
+        const { grade, class: cls, number, name } = studentInfo;
         const fetchAssessments = async () => {
             setIsLoading(true); setError('');
             try {
@@ -67,12 +69,21 @@ const StudentPortal = () => {
                 setAssessments(Array.isArray(data) ? data.filter(a => {
                     if (!a.IsPublic) return false;
                     if (!a.Grades || String(a.Grades).trim() === '') return true;
-                    return String(a.Grades).split(',').map(g => g.trim()).includes(String(studentInfo.grade));
+                    return String(a.Grades).split(',').map(g => g.trim()).includes(String(grade));
                 }) : []);
             } catch { setError('평가 목록을 불러오지 못했습니다.'); }
             finally { setIsLoading(false); }
         };
+        const fetchMyScores = async () => {
+            try {
+                const params = new URLSearchParams({ action: 'getMyScores', grade, class: cls, number, name });
+                const res = await fetch(`${GAS_URL}?${params}`);
+                const data = await res.json();
+                setMyScores(Array.isArray(data) ? data : []);
+            } catch {}
+        };
         fetchAssessments();
+        fetchMyScores();
     }, [isLoggedIn]);
 
     const handleLogin = (e) => {
@@ -185,6 +196,31 @@ const StudentPortal = () => {
             {submitMsg && (
                 <div style={{ margin: '0.5rem 0', padding: '0.75rem 1rem', background: submitMsg.includes('완료') ? '#e6f4ea' : '#fce8e6', borderRadius: '8px', color: submitMsg.includes('완료') ? '#188038' : '#c5221f' }}>
                     {submitMsg}
+                </div>
+            )}
+
+            {myScores.length > 0 && (
+                <div className="glass-card" style={{ margin: '0.5rem 0', padding: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem' }}>내 점수</h4>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid #eee' }}>
+                                <th style={{ textAlign: 'left', padding: '0.4rem 0.5rem' }}>평가명</th>
+                                <th style={{ textAlign: 'center', padding: '0.4rem 0.5rem' }}>점수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {myScores.map((s, i) => {
+                                const assessment = assessments.find(a => a.ID === s.AssessmentID);
+                                return (
+                                    <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                        <td style={{ padding: '0.4rem 0.5rem' }}>{assessment ? assessment.Title : s.AssessmentID}</td>
+                                        <td style={{ textAlign: 'center', padding: '0.4rem 0.5rem', fontWeight: 'bold', color: '#1a73e8' }}>{s.Score}점</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
 

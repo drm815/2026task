@@ -198,7 +198,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
 };
 
 // ── 채점 행 ─────────────────────────────────────────────────────────
-const ScoreRow = ({ submission: s, onSave, assessmentType }) => {
+const ScoreRow = ({ submission: s, onSave, onToggleScorePublic, assessmentType }) => {
     const [score, setScore] = useState(s.Score || '');
     return (
         <tr>
@@ -215,6 +215,14 @@ const ScoreRow = ({ submission: s, onSave, assessmentType }) => {
                 <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
             </td>
             <td><button onClick={() => onSave(s, score)} className="save-btn">저장</button></td>
+            <td>
+                <button
+                    onClick={() => onToggleScorePublic(s, !s.IsScorePublic)}
+                    style={{ background: s.IsScorePublic ? '#e57373' : '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}
+                >
+                    {s.IsScorePublic ? '비공개' : '공개'}
+                </button>
+            </td>
         </tr>
     );
 };
@@ -327,6 +335,64 @@ const TeacherDashboard = () => {
                 setAssessments(prev => prev.map(a => a.ID === id ? { ...a, IsPublic: isPublic } : a));
             else setError('공개 설정 변경에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
+    };
+
+    const handleToggleScorePublic = async (submission, isPublic) => {
+        try {
+            const params = new URLSearchParams({ action: 'toggleScorePublic', grade: submission.Grade, class: submission.Class, number: submission.Number, assessmentID: submission.AssessmentID, isPublic: String(isPublic) });
+            const res = await fetch(`${GAS_URL}?${params}`);
+            const data = await res.json();
+            if (data.status === 'success')
+                setSubmissions(prev => prev.map(s =>
+                    s.Number === submission.Number && s.AssessmentID === submission.AssessmentID
+                        ? { ...s, IsScorePublic: isPublic } : s));
+            else setError('점수 공개 설정에 실패했습니다.');
+        } catch { setError('서버 연결에 실패했습니다.'); }
+    };
+
+    const handleDownloadCSV = async () => {
+        try {
+            const res = await fetch(`${GAS_URL}?action=getSubmissions`);
+            const allSubs = await res.json();
+            if (!Array.isArray(allSubs) || allSubs.length === 0) return;
+
+            // 학년별 그룹핑
+            const gradeGroups = {};
+            allSubs.forEach(s => {
+                const g = s.Grade;
+                if (!gradeGroups[g]) gradeGroups[g] = {};
+                const key = `${s.Class}-${s.Number}`;
+                if (!gradeGroups[g][key]) gradeGroups[g][key] = { Class: s.Class, Number: s.Number, Name: s.Name, scores: {} };
+                gradeGroups[g][key].scores[s.AssessmentID] = s.Score;
+            });
+
+            // 평가 제목 맵
+            const assessmentMap = {};
+            assessments.forEach(a => { assessmentMap[a.ID] = a.Title; });
+
+            // 학년별 CSV 생성 및 다운로드
+            Object.keys(gradeGroups).sort().forEach(grade => {
+                const students = Object.values(gradeGroups[grade]).sort((a, b) => a.Class - b.Class || a.Number - b.Number);
+                // 이 학년에 해당하는 평가 목록
+                const gradeAssessments = assessments.filter(a => {
+                    if (!a.Grades || String(a.Grades).trim() === '') return true;
+                    return String(a.Grades).split(',').map(g => g.trim()).includes(String(grade));
+                });
+                const headers = ['반', '번호', '이름', ...gradeAssessments.map(a => a.Title)];
+                const rows = students.map(s => [
+                    s.Class, s.Number, s.Name,
+                    ...gradeAssessments.map(a => s.scores[a.ID] ?? '')
+                ]);
+                const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+                const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${grade}학년_수행평가_점수.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        } catch { setError('CSV 다운로드에 실패했습니다.'); }
     };
 
     const handleDelete = async (id) => {
@@ -487,7 +553,10 @@ const TeacherDashboard = () => {
                         <h3>채점: {selectedAssessment.Title}
                             <span style={{ fontSize: '0.8rem', color: '#888', marginLeft: '0.5rem' }}>({selectedAssessment.Type})</span>
                         </h3>
-                        <button className="btn-text" onClick={() => { setSelectedAssessment(null); setSubmissions([]); }}>닫기</button>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn-outline" onClick={handleDownloadCSV}>학년별 CSV 다운로드</button>
+                            <button className="btn-text" onClick={() => { setSelectedAssessment(null); setSubmissions([]); }}>닫기</button>
+                        </div>
                     </div>
                     {isLoading ? <p className="empty-msg">불러오는 중...</p>
                         : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
@@ -503,11 +572,12 @@ const TeacherDashboard = () => {
                                                 <th className="content-col">내용/파일</th>
                                                 <th>점수</th>
                                                 <th>저장</th>
+                                                <th>점수공개</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {submissions.map((s, i) => (
-                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type} />
+                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} onToggleScorePublic={handleToggleScorePublic} assessmentType={selectedAssessment.Type} />
                                             ))}
                                         </tbody>
                                     </table>
