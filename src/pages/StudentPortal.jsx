@@ -3,23 +3,10 @@ import './StudentPortal.css';
 
 const GAS_URL = '/api/gas';
 
-// refimg:// URL을 GAS에서 가져와 표시하는 컴포넌트
+// 참고 이미지 표시 컴포넌트 (data URL 직접 표시)
 const RefImage = ({ url }) => {
-    const [src, setSrc] = useState('');
-    useEffect(() => {
-        if (!url) return;
-        if (url.startsWith('refimg://')) {
-            const imgId = url.replace('refimg://', '');
-            fetch(`${GAS_URL}?action=getRefImage&imgId=${imgId}`)
-                .then(r => r.json())
-                .then(d => { if (d.status === 'success') setSrc(d.dataUrl); })
-                .catch(() => {});
-        } else {
-            setSrc(url);
-        }
-    }, [url]);
-    if (!src) return <p style={{ fontSize: '0.8rem', color: '#aaa' }}>이미지 로딩 중...</p>;
-    return <img src={src} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />;
+    if (!url) return null;
+    return <img src={url} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />;
 };
 
 // ── 객관식 제출 UI ───────────────────────────────────────────────────

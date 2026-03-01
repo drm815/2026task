@@ -35,7 +35,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    var p = e.parameter;
+    var p = e.parameter || {};
     var body = {};
     if (e.postData && e.postData.contents) {
       try { body = JSON.parse(e.postData.contents); } catch {}
@@ -43,6 +43,8 @@ function doPost(e) {
     var action = body.action || p.action;
     if (action === 'submitAssignment')  return handleSubmit(body);
     if (action === 'uploadRefMaterial') return handleUploadRefMaterial(body);
+    if (action === 'createAssessment')  return handleCreateAssessment(body);
+    if (action === 'updateAssessment')  return handleUpdateAssessment(body);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
