@@ -380,7 +380,7 @@ const StudentPortal = () => {
                             <tbody>
                                 {myScores.map((s, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                        <td style={{ padding: '0.4rem 0.5rem' }}>{s.AssessmentTitle || s.AssessmentID}</td>
+                                        <td style={{ padding: '0.4rem 0.5rem' }}>{s.AssessmentTitle || '(삭제된 평가)'}</td>
                                         <td style={{ textAlign: 'center', padding: '0.4rem 0.5rem', fontWeight: 'bold', color: '#1a73e8' }}>{s.Score}점</td>
                                     </tr>
                                 ))}

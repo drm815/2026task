@@ -717,7 +717,7 @@ const TeacherDashboard = () => {
             .filter(s => s.Grade == student.Grade && s.Class == student.Class && s.Number == student.Number && s.Name === student.Name)
             .map(s => {
                 const assessment = assessments.find(a => a.ID === s.AssessmentID);
-                return { ...s, AssessmentTitle: assessment?.Title || s.AssessmentID };
+                return { ...s, AssessmentTitle: assessment?.Title || '(삭제된 평가)' };
             });
     };
 

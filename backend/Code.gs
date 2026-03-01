@@ -471,7 +471,7 @@ function handleGetMyScores(p) {
         rows[i][3] == p.number && rows[i][9] === true) {
       var obj = {};
       headers.forEach(function(h, j) { obj[h] = rows[i][j]; });
-      obj.AssessmentTitle = assessmentTitleMap[obj.AssessmentID] || obj.AssessmentID;
+      obj.AssessmentTitle = assessmentTitleMap[obj.AssessmentID] || '(삭제된 평가)';
       result.push(obj);
     }
   }
