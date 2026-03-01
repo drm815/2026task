@@ -208,25 +208,43 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                         type="file"
                         accept="image/*"
                         disabled={editRefUploading}
-                        onChange={e => {
+                        onChange={async e => {
                             const f = e.target.files[0];
                             if (!f) return;
                             setEditRefUploading(true);
-                            const reader = new FileReader();
-                            reader.onload = async (ev) => {
-                                const base64 = ev.target.result.split(',')[1];
-                                try {
-                                    const res = await fetch(GAS_URL, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: f.name, mimeType: f.type }),
-                                    });
-                                    const data = await res.json();
-                                    if (data.status === 'success') setEditForm(prev => ({ ...prev, refImageUrl: data.url }));
-                                } catch {}
-                                finally { setEditRefUploading(false); }
-                            };
-                            reader.readAsDataURL(f);
+                            try {
+                                const resized = await new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                        const img = new Image();
+                                        img.onload = () => {
+                                            const MAX = 900;
+                                            let w = img.width, h = img.height;
+                                            if (w > MAX || h > MAX) {
+                                                if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                                                else { w = Math.round(w * MAX / h); h = MAX; }
+                                            }
+                                            const canvas = document.createElement('canvas');
+                                            canvas.width = w; canvas.height = h;
+                                            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                                            resolve(canvas.toDataURL('image/jpeg', 0.85));
+                                        };
+                                        img.onerror = reject;
+                                        img.src = ev.target.result;
+                                    };
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(f);
+                                });
+                                const base64 = resized.split(',')[1];
+                                const res = await fetch(GAS_URL, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: f.name, mimeType: 'image/jpeg' }),
+                                });
+                                const data = await res.json();
+                                if (data.status === 'success') setEditForm(prev => ({ ...prev, refImageUrl: data.url }));
+                            } catch {}
+                            finally { setEditRefUploading(false); }
                         }}
                     />
                     {editRefUploading && <p style={{ fontSize: '0.8rem', color: '#888', margin: 0 }}>이미지 업로드 중...</p>}
@@ -505,22 +523,41 @@ const TeacherDashboard = () => {
     const handleUploadRefImage = async (file, onSuccess) => {
         if (!file) return;
         setRefImageUploading(true);
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            const base64 = ev.target.result.split(',')[1];
-            try {
-                const res = await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: file.name, mimeType: file.type }),
-                });
-                const data = await res.json();
-                if (data.status === 'success') onSuccess(data.url);
-                else setError('이미지 업로드 실패: ' + (data.message || ''));
-            } catch { setError('이미지 업로드 중 오류'); }
-            finally { setRefImageUploading(false); }
-        };
-        reader.readAsDataURL(file);
+        try {
+            // 이미지를 최대 900px로 리사이즈 후 base64 추출
+            const resized = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const MAX = 900;
+                        let w = img.width, h = img.height;
+                        if (w > MAX || h > MAX) {
+                            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                            else { w = Math.round(w * MAX / h); h = MAX; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+                    img.onerror = reject;
+                    img.src = ev.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            const base64 = resized.split(',')[1];
+            const res = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: file.name, mimeType: 'image/jpeg' }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') onSuccess(data.url);
+            else setError('이미지 업로드 실패: ' + (data.message || ''));
+        } catch { setError('이미지 업로드 중 오류'); }
+        finally { setRefImageUploading(false); }
     };
 
     const handleCreate = async () => {

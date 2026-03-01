@@ -135,18 +135,23 @@ const StudentPortal = () => {
         } catch { setCodeError('서버 오류가 발생했습니다.'); }
     };
 
-    // 코드 없는 학생 - 첫 발급 요청
+    // 코드 발급 요청
     const handleIssueCode = async () => {
         setCodeError('');
         setNewCodeNotice('');
         const { grade, class: cls, number, name } = studentInfo;
         try {
-            // 빈 제출로 코드 자동 생성 트리거 대신, getOrCreate를 직접 호출
             const params = new URLSearchParams({ action: 'issueStudentCode', grade, class: cls, number, name });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
-            if (data.status === 'success' && data.code) {
-                setNewCodeNotice(data.code);
+            if (data.status === 'success') {
+                if (data.isNew && data.code) {
+                    // 최초 발급 - 코드 1회 표시
+                    setNewCodeNotice(data.code);
+                } else {
+                    // 이미 발급된 코드 있음
+                    setCodeError('이미 발급된 코드가 있습니다. 선생님께 문의하세요.');
+                }
             } else {
                 setCodeError('코드 발급에 실패했습니다. 선생님께 문의하세요.');
             }
@@ -285,9 +290,9 @@ const StudentPortal = () => {
                         {codeError && <p style={{ color: 'red', fontSize: '0.85rem', margin: 0 }}>{codeError}</p>}
                         {newCodeNotice && (
                             <div style={{ background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '8px', padding: '0.75rem', textAlign: 'center' }}>
-                                <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', color: '#2e7d32' }}>발급된 코드를 선생님께 확인하세요.</p>
+                                <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', color: '#2e7d32' }}>코드가 발급되었습니다. 이 코드는 다시 확인할 수 없으니 기억해두세요.</p>
                                 <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', letterSpacing: '0.5rem', color: '#1b5e20' }}>{newCodeNotice}</p>
-                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#555' }}>이 코드를 위 입력란에 입력하세요.</p>
+                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#555' }}>위 입력란에 입력하세요.</p>
                             </div>
                         )}
                         <button type="submit" className="btn-primary w-full">확인</button>

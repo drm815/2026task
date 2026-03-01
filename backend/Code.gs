@@ -88,8 +88,22 @@ function handleIssueStudentCode(p) {
   if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
   if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
   if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+
+  // 이미 코드가 있는지 먼저 확인
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(CONFIG.STUDENT_CODE_SHEET);
+  if (sheet) {
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][0] == p.grade && rows[i][1] == p.class && rows[i][2] == p.number && rows[i][3] == p.name) {
+        // 이미 발급된 코드 있음 - 코드 노출 안 함
+        return createResponse({ status: 'success', isNew: false });
+      }
+    }
+  }
+  // 신규 발급
   var code = getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
-  return createResponse({ status: 'success', code: code });
+  return createResponse({ status: 'success', isNew: true, code: code });
 }
 
 function handleVerifyStudentCode(p) {
@@ -459,15 +473,14 @@ function handleUploadRefMaterial(p) {
   if (!p.fileData || !p.fileName || !p.mimeType)
     return createResponse({ status: 'error', message: 'Missing file data' });
   try {
+    // Drive에 백업 저장
     var folder = getOrCreateFolder('Performance_Assessments');
     var refFolder = getOrCreateFolder('RefMaterials', folder);
     var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
-    var file = refFolder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    var fileId = file.getId();
-    // thumbnail URL은 외부 img 태그에서 표시 가능
-    var imageUrl = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1200';
-    return createResponse({ status: 'success', url: imageUrl });
+    refFolder.createFile(blob);
+    // data URL로 반환 - img 태그에서 직접 사용 (Drive URL 차단 문제 회피)
+    var dataUrl = 'data:' + p.mimeType + ';base64,' + p.fileData;
+    return createResponse({ status: 'success', url: dataUrl });
   } catch(err) {
     return createResponse({ status: 'error', message: err.toString() });
   }
