@@ -464,9 +464,9 @@ function handleUploadRefMaterial(p) {
     var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
     var file = refFolder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    // 이미지 직접 표시용 URL
     var fileId = file.getId();
-    var imageUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
+    // thumbnail URL은 외부 img 태그에서 표시 가능
+    var imageUrl = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1200';
     return createResponse({ status: 'success', url: imageUrl });
   } catch(err) {
     return createResponse({ status: 'error', message: err.toString() });
