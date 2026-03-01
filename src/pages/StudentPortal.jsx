@@ -210,15 +210,12 @@ const StudentPortal = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {myScores.map((s, i) => {
-                                const assessment = assessments.find(a => a.ID === s.AssessmentID);
-                                return (
-                                    <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                        <td style={{ padding: '0.4rem 0.5rem' }}>{assessment ? assessment.Title : s.AssessmentID}</td>
-                                        <td style={{ textAlign: 'center', padding: '0.4rem 0.5rem', fontWeight: 'bold', color: '#1a73e8' }}>{s.Score}점</td>
-                                    </tr>
-                                );
-                            })}
+                            {myScores.map((s, i) => (
+                                <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                    <td style={{ padding: '0.4rem 0.5rem' }}>{s.AssessmentTitle || s.AssessmentID}</td>
+                                    <td style={{ textAlign: 'center', padding: '0.4rem 0.5rem', fontWeight: 'bold', color: '#1a73e8' }}>{s.Score}점</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>

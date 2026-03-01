@@ -7,7 +7,7 @@ const TYPES = ['서답형', '객관식', '주관식 퀴즈', '파일 업로드']
 
 // ── 객관식 문제 편집기 ──────────────────────────────────────────────
 const MultipleChoiceEditor = ({ questions, onChange }) => {
-    const addQuestion = () => onChange([...questions, { question: '', options: ['', '', '', ''], answer: 0 }]);
+    const addQuestion = () => onChange([...questions, { question: '', options: ['', '', '', ''], answer: 0, score: 1 }]);
     const removeQuestion = (qi) => onChange(questions.filter((_, i) => i !== qi));
     const updateQuestion = (qi, field, value) => {
         const qs = questions.map((q, i) => i === qi ? { ...q, [field]: value } : q);
@@ -54,7 +54,20 @@ const MultipleChoiceEditor = ({ questions, onChange }) => {
                             />
                         </div>
                     ))}
-                    <small style={{ color: '#888' }}>라디오 버튼으로 정답 선택</small>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                        <small style={{ color: '#888' }}>라디오 버튼으로 정답 선택</small>
+                        <label style={{ fontSize: '0.8rem', color: '#555', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            배점:
+                            <input
+                                type="number"
+                                min="1"
+                                value={q.score || 1}
+                                onChange={e => updateQuestion(qi, 'score', Number(e.target.value))}
+                                style={{ width: '60px', padding: '0.2rem 0.3rem' }}
+                            />
+                            점
+                        </label>
+                    </div>
                 </div>
             ))}
             <button onClick={addQuestion} style={{ padding: '0.4rem', cursor: 'pointer' }}>+ 문제 추가</button>

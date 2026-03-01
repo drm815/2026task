@@ -136,17 +136,19 @@ function handleSubmit(p) {
     }
   }
 
-  // 객관식 자동 채점
+  // 객관식 자동 채점 (문항별 배점 적용)
   var autoScore = undefined;
   if (assessmentType === '객관식' && p.content) {
     try {
       var questions = JSON.parse(assessmentQuestions);
       var studentAnswers = JSON.parse(p.content);
-      var correct = 0;
+      var totalScore = 0;
       questions.forEach(function(q, qi) {
-        if (studentAnswers[qi] !== undefined && Number(studentAnswers[qi]) === Number(q.answer)) correct++;
+        if (studentAnswers[qi] !== undefined && Number(studentAnswers[qi]) === Number(q.answer)) {
+          totalScore += Number(q.score) || 0;
+        }
       });
-      autoScore = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+      autoScore = totalScore;
     } catch(e) { autoScore = undefined; }
   }
 
@@ -317,6 +319,20 @@ function handleGetMyScores(p) {
   var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) return createResponse([]);
+
+  // 평가 제목 맵 생성
+  var assessmentTitleMap = {};
+  var aSheet = ss.getSheetByName(CONFIG.ASSESSMENT_SHEET);
+  if (aSheet) {
+    var aRows = aSheet.getDataRange().getValues();
+    var aHeaders = aRows[0];
+    var idCol = aHeaders.indexOf('ID');
+    var titleCol = aHeaders.indexOf('Title');
+    for (var k = 1; k < aRows.length; k++) {
+      assessmentTitleMap[aRows[k][idCol]] = aRows[k][titleCol];
+    }
+  }
+
   var rows = sheet.getDataRange().getValues();
   var headers = rows[0];
   var result = [];
@@ -325,6 +341,7 @@ function handleGetMyScores(p) {
         rows[i][3] == p.number && rows[i][9] === true) {
       var obj = {};
       headers.forEach(function(h, j) { obj[h] = rows[i][j]; });
+      obj.AssessmentTitle = assessmentTitleMap[obj.AssessmentID] || obj.AssessmentID;
       result.push(obj);
     }
   }
