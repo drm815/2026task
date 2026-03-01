@@ -1,6 +1,7 @@
 const CONFIG = {
   SHEET_NAME: 'Data',
   ASSESSMENT_SHEET: 'Assessments',
+  STUDENT_CODE_SHEET: 'StudentCodes',
   SPREADSHEET_ID: '17Sh0JAetBrjMV0-QAzhv0X31HYYgYzDFRTXMzb2fJVg'
 };
 
@@ -8,18 +9,20 @@ function doGet(e) {
   try {
     var p = e.parameter;
     var action = p.action;
-    if (action === 'getAssessments')   return handleGetAssessments();
-    if (action === 'getSubmissions')   return handleGetSubmissions();
-    if (action === 'verifyTeacher')    return handleVerifyTeacher(p);
-    if (action === 'submitAssignment') return handleSubmit(p);
-    if (action === 'updateScore')      return handleUpdateScore(p);
-    if (action === 'createAssessment') return handleCreateAssessment(p);
-    if (action === 'toggleVisibility') return handleToggleVisibility(p);
-    if (action === 'updateDeadline')   return handleUpdateDeadline(p);
-    if (action === 'updateAssessment')   return handleUpdateAssessment(p);
-    if (action === 'deleteAssessment')   return handleDeleteAssessment(p);
-    if (action === 'toggleScorePublic')  return handleToggleScorePublic(p);
-    if (action === 'getMyScores')        return handleGetMyScores(p);
+    if (action === 'getAssessments')    return handleGetAssessments();
+    if (action === 'getSubmissions')    return handleGetSubmissions();
+    if (action === 'verifyTeacher')     return handleVerifyTeacher(p);
+    if (action === 'submitAssignment')  return handleSubmit(p);
+    if (action === 'updateScore')       return handleUpdateScore(p);
+    if (action === 'createAssessment')  return handleCreateAssessment(p);
+    if (action === 'toggleVisibility')  return handleToggleVisibility(p);
+    if (action === 'updateDeadline')    return handleUpdateDeadline(p);
+    if (action === 'updateAssessment')  return handleUpdateAssessment(p);
+    if (action === 'deleteAssessment')  return handleDeleteAssessment(p);
+    if (action === 'toggleScorePublic') return handleToggleScorePublic(p);
+    if (action === 'getMyScores')       return handleGetMyScores(p);
+    if (action === 'getMySubmissions')  return handleGetMySubmissions(p);
+    if (action === 'verifyStudentCode') return handleVerifyStudentCode(p);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
@@ -39,6 +42,61 @@ function isValidUuid(v)     { return typeof v === 'string' && /^[0-9a-f-]{36}$/.
 function isValidScore(v)    { return v !== '' && v !== null && v !== undefined && Number(v) >= 0 && Number(v) <= 10000; }
 function isValidMaxScore(v) { return v === '' || v === undefined || v === null || (Number(v) >= 1 && Number(v) <= 10000); }
 function isValidDeadline(v) { return typeof v === 'string' && !isNaN(Date.parse(v)); }
+function isValidCode(v)     { return typeof v === 'string' && /^\d{4}$/.test(v); }
+
+// ── 학생 코드 관련 ──────────────────────────────────────────────────
+
+function getOrCreateStudentCode(grade, cls, number, name) {
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(CONFIG.STUDENT_CODE_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.STUDENT_CODE_SHEET);
+    sheet.appendRow(['Grade', 'Class', 'Number', 'Name', 'Code']);
+  }
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] == grade && rows[i][1] == cls && rows[i][2] == number && rows[i][3] == name) {
+      return String(rows[i][4]);
+    }
+  }
+  // 신규 코드 생성 (4자리 랜덤)
+  var code = String(Math.floor(1000 + Math.random() * 9000));
+  sheet.appendRow([grade, cls, number, name, code]);
+  return code;
+}
+
+function handleVerifyStudentCode(p) {
+  if (!isValidGrade(p.grade))   return createResponse({ status: 'error', message: 'Invalid grade' });
+  if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
+  if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
+  if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+  if (!isValidCode(p.code))     return createResponse({ status: 'error', message: 'Invalid code' });
+  var realCode = getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
+  if (p.code === realCode) return createResponse({ status: 'success' });
+  return createResponse({ status: 'error', message: '코드가 올바르지 않습니다.' });
+}
+
+// ── 제출 여부 조회 ──────────────────────────────────────────────────
+
+function handleGetMySubmissions(p) {
+  if (!isValidGrade(p.grade))   return createResponse({ status: 'error', message: 'Invalid grade' });
+  if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
+  if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
+  if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return createResponse([]);
+  var rows = sheet.getDataRange().getValues();
+  var submitted = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][1] == p.grade && rows[i][2] == p.class && rows[i][3] == p.number && rows[i][4] == p.name) {
+      submitted.push(String(rows[i][5])); // AssessmentID
+    }
+  }
+  return createResponse(submitted);
+}
+
+// ── 평가 목록 ───────────────────────────────────────────────────────
 
 function handleGetAssessments() {
   var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -124,7 +182,6 @@ function handleSubmit(p) {
   if (assessmentType === '파일 업로드' && p.fileData && p.fileName && p.mimeType) {
     try {
       var folder = getOrCreateFolder('Performance_Assessments');
-      // 폴더명: 학년_평가제목
       var subFolderName = assessmentGrade + '학년_' + (assessmentTitle || p.assessmentID);
       var subFolder = getOrCreateFolder(subFolderName, folder);
       var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
@@ -171,7 +228,8 @@ function handleSubmit(p) {
     }
   }
 
-  // 최초 제출
+  // 최초 제출 - 학생 코드 자동 생성
+  getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
   var scoreVal = autoScore !== undefined ? autoScore : '';
   sheet.appendRow([new Date(), p.grade, p.class, p.number, p.name, p.assessmentID, content, fileURL, scoreVal, false]);
   var res = { status: 'success' };
@@ -316,9 +374,13 @@ function handleGetMyScores(p) {
   if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
   if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
   if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+  if (!isValidCode(p.code))     return createResponse({ status: 'error', message: 'Invalid code' });
+
+  // 코드 검증
+  var realCode = getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
+  if (p.code !== realCode) return createResponse({ status: 'error', message: '코드가 올바르지 않습니다.' });
+
   var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) return createResponse([]);
 
   // 평가 제목 맵 생성
   var assessmentTitleMap = {};
@@ -333,6 +395,8 @@ function handleGetMyScores(p) {
     }
   }
 
+  var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return createResponse([]);
   var rows = sheet.getDataRange().getValues();
   var headers = rows[0];
   var result = [];

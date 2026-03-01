@@ -210,6 +210,14 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
     );
 };
 
+// ── 답만 추출 (서답형/주관식: "1. 문제\n답: 내용" 형식에서 답만) ────
+const extractAnswers = (content) => {
+    if (!content) return '-';
+    const lines = content.split('\n');
+    const answers = lines.filter(l => l.startsWith('답: ')).map(l => l.replace('답: ', '').trim());
+    return answers.length > 0 ? answers.join(' / ') : content;
+};
+
 // ── 채점 행 ─────────────────────────────────────────────────────────
 const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) => {
     const [score, setScore] = useState(s.Score || '');
@@ -223,7 +231,9 @@ const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) =
             <td className="content-cell">
                 {assessmentType === '파일 업로드'
                     ? (s.FileURL ? <a href={s.FileURL} target="_blank" rel="noreferrer" className="file-link">파일 보기</a> : '-')
-                    : s.Content}
+                    : assessmentType === '주관식 퀴즈' || assessmentType === '서답형'
+                        ? extractAnswers(s.Content)
+                        : s.Content}
             </td>
             <td>
                 <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
@@ -576,10 +586,21 @@ const TeacherDashboard = () => {
             {/* 채점 패널 */}
             {selectedAssessment && (
                 <div className="glass-card p-6" style={{ marginTop: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3>채점: {selectedAssessment.Title}
-                            <span style={{ fontSize: '0.8rem', color: '#888', marginLeft: '0.5rem' }}>({selectedAssessment.Type})</span>
-                        </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                        <div>
+                            <h3 style={{ margin: '0 0 0.25rem' }}>채점: {selectedAssessment.Title}
+                                <span style={{ fontSize: '0.8rem', color: '#888', marginLeft: '0.5rem' }}>({selectedAssessment.Type})</span>
+                            </h3>
+                            {(selectedAssessment.Type === '주관식 퀴즈' || selectedAssessment.Type === '서답형') && (() => {
+                                let qs = [];
+                                try { qs = JSON.parse(selectedAssessment.Questions || '[]'); } catch {}
+                                return qs.length > 0 ? (
+                                    <div style={{ fontSize: '0.8rem', color: '#555', marginTop: '0.25rem' }}>
+                                        {qs.map((q, i) => <span key={i} style={{ marginRight: '1rem' }}>{i + 1}. {q.question}</span>)}
+                                    </div>
+                                ) : null;
+                            })()}
+                        </div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                             <button className="btn-outline" onClick={handleDownloadCSV}>학년별 CSV 다운로드</button>
                             <button className="btn-text" onClick={() => { setSelectedAssessment(null); setSubmissions([]); }}>닫기</button>
