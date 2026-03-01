@@ -24,6 +24,23 @@ function doGet(e) {
     if (action === 'getMySubmissions')  return handleGetMySubmissions(p);
     if (action === 'verifyStudentCode') return handleVerifyStudentCode(p);
     if (action === 'issueStudentCode')  return handleIssueStudentCode(p);
+    if (action === 'uploadRefMaterial') return handleUploadRefMaterial(p);
+    return createResponse({ status: 'error', message: 'Unknown action' });
+  } catch (err) {
+    return createResponse({ status: 'error', message: err.toString() });
+  }
+}
+
+function doPost(e) {
+  try {
+    var p = e.parameter;
+    var body = {};
+    if (e.postData && e.postData.contents) {
+      try { body = JSON.parse(e.postData.contents); } catch {}
+    }
+    var action = body.action || p.action;
+    if (action === 'submitAssignment')  return handleSubmit(body);
+    if (action === 'uploadRefMaterial') return handleUploadRefMaterial(body);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
@@ -291,11 +308,12 @@ function handleCreateAssessment(p) {
   var sheet = ss.getSheetByName(CONFIG.ASSESSMENT_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.ASSESSMENT_SHEET);
-    sheet.appendRow(['ID','Title','Description','Criteria','IsPublic','CreatedAt','Deadline','Grades','Type','Questions','MaxScore']);
+    sheet.appendRow(['ID','Title','Description','Criteria','IsPublic','CreatedAt','Deadline','Grades','Type','Questions','MaxScore','RefText','RefImageUrl']);
   }
   var id = Utilities.getUuid();
   sheet.appendRow([id, p.title, p.description, p.criteria, false, new Date(), new Date(p.deadline),
-    p.grades || '', p.type || '서답형', p.questions || '[]', p.maxScore || '']);
+    p.grades || '', p.type || '서답형', p.questions || '[]', p.maxScore || '',
+    p.refText || '', p.refImageUrl || '']);
   return createResponse({ status: 'success', id: id });
 }
 
@@ -317,8 +335,10 @@ function handleUpdateAssessment(p) {
       if (p.deadline && isValidDeadline(p.deadline)) sheet.getRange(i + 1, 7).setValue(new Date(p.deadline));
       if (p.grades !== undefined) sheet.getRange(i + 1, 8).setValue(p.grades);
       if (p.type)                 sheet.getRange(i + 1, 9).setValue(p.type);
-      if (p.questions !== undefined) sheet.getRange(i + 1, 10).setValue(p.questions);
-      if (p.maxScore !== undefined)  sheet.getRange(i + 1, 11).setValue(p.maxScore);
+      if (p.questions !== undefined)   sheet.getRange(i + 1, 10).setValue(p.questions);
+      if (p.maxScore !== undefined)    sheet.getRange(i + 1, 11).setValue(p.maxScore);
+      if (p.refText !== undefined)     sheet.getRange(i + 1, 12).setValue(p.refText);
+      if (p.refImageUrl !== undefined) sheet.getRange(i + 1, 13).setValue(p.refImageUrl);
       return createResponse({ status: 'success' });
     }
   }
@@ -433,6 +453,24 @@ function handleGetMyScores(p) {
     }
   }
   return createResponse(result);
+}
+
+function handleUploadRefMaterial(p) {
+  if (!p.fileData || !p.fileName || !p.mimeType)
+    return createResponse({ status: 'error', message: 'Missing file data' });
+  try {
+    var folder = getOrCreateFolder('Performance_Assessments');
+    var refFolder = getOrCreateFolder('RefMaterials', folder);
+    var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
+    var file = refFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // 이미지 직접 표시용 URL
+    var fileId = file.getId();
+    var imageUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
+    return createResponse({ status: 'success', url: imageUrl });
+  } catch(err) {
+    return createResponse({ status: 'error', message: err.toString() });
+  }
 }
 
 function getOrCreateFolder(name, parent) {

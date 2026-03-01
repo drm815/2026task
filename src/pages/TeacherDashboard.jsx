@@ -116,7 +116,10 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
         grades: item.Grades ? String(item.Grades).split(',').filter(Boolean) : [],
         type: item.Type || '서답형',
         questions: parsedQuestions,
+        refText: item.RefText || '',
+        refImageUrl: item.RefImageUrl || '',
     });
+    const [editRefUploading, setEditRefUploading] = useState(false);
     const isPast = item.Deadline && new Date() > new Date(item.Deadline);
 
     return (
@@ -184,6 +187,49 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                     {(editForm.type === '주관식 퀴즈' || editForm.type === '서답형') && (
                         <ShortAnswerEditor questions={editForm.questions} onChange={qs => setEditForm({ ...editForm, questions: qs })} type={editForm.type} />
                     )}
+                    <label style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>예시문 (선택)</label>
+                    <textarea
+                        placeholder="학생에게 보여줄 예시문이나 안내글을 입력하세요"
+                        value={editForm.refText}
+                        onChange={e => setEditForm({ ...editForm, refText: e.target.value })}
+                        style={{ minHeight: '80px' }}
+                    />
+                    <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
+                    {editForm.refImageUrl && (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <img src={editForm.refImageUrl} alt="참고 이미지" style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                            <button
+                                onClick={() => setEditForm({ ...editForm, refImageUrl: '' })}
+                                style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
+                            >×</button>
+                        </div>
+                    )}
+                    <input
+                        type="file"
+                        accept="image/*"
+                        disabled={editRefUploading}
+                        onChange={e => {
+                            const f = e.target.files[0];
+                            if (!f) return;
+                            setEditRefUploading(true);
+                            const reader = new FileReader();
+                            reader.onload = async (ev) => {
+                                const base64 = ev.target.result.split(',')[1];
+                                try {
+                                    const res = await fetch(GAS_URL, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: f.name, mimeType: f.type }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.status === 'success') setEditForm(prev => ({ ...prev, refImageUrl: data.url }));
+                                } catch {}
+                                finally { setEditRefUploading(false); }
+                            };
+                            reader.readAsDataURL(f);
+                        }}
+                    />
+                    {editRefUploading && <p style={{ fontSize: '0.8rem', color: '#888', margin: 0 }}>이미지 업로드 중...</p>}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => {
                             onUpdate(item.ID, { ...editForm, grades: editForm.grades.join(','), questions: JSON.stringify(editForm.questions) });
@@ -254,8 +300,10 @@ const TeacherDashboard = () => {
     const [authError, setAuthError] = useState('');
     const [assessments, setAssessments] = useState([]);
     const [newAssessment, setNewAssessment] = useState({
-        title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: ''
+        title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '', refText: '', refImageUrl: ''
     });
+    const [refImageFile, setRefImageFile] = useState(null);
+    const [refImageUploading, setRefImageUploading] = useState(false);
     const [submissions, setSubmissions] = useState([]);
     const [selectedAssessment, setSelectedAssessment] = useState(null);
     const [checkedRows, setCheckedRows] = useState({});
@@ -454,6 +502,27 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
+    const handleUploadRefImage = async (file, onSuccess) => {
+        if (!file) return;
+        setRefImageUploading(true);
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            const base64 = ev.target.result.split(',')[1];
+            try {
+                const res = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: file.name, mimeType: file.type }),
+                });
+                const data = await res.json();
+                if (data.status === 'success') onSuccess(data.url);
+                else setError('이미지 업로드 실패: ' + (data.message || ''));
+            } catch { setError('이미지 업로드 중 오류'); }
+            finally { setRefImageUploading(false); }
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleCreate = async () => {
         if (!newAssessment.title.trim()) return;
         setIsLoading(true); setError('');
@@ -468,11 +537,14 @@ const TeacherDashboard = () => {
                 type: newAssessment.type,
                 questions: JSON.stringify(newAssessment.questions),
                 maxScore: newAssessment.maxScore,
+                refText: newAssessment.refText,
+                refImageUrl: newAssessment.refImageUrl,
             });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
-                setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '' });
+                setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '', refText: '', refImageUrl: '' });
+                setRefImageFile(null);
                 await fetchAssessments();
             } else setError('등록에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
@@ -543,6 +615,30 @@ const TeacherDashboard = () => {
                             <p style={{ fontSize: '0.85rem', color: '#888' }}>학생이 파일을 업로드합니다. 파일명은 학년-반-번호-이름으로 자동 저장됩니다.</p>
                         )}
 
+                        <label style={{ fontSize: '0.85rem', color: '#666' }}>예시문 (선택)</label>
+                        <textarea placeholder="학생에게 보여줄 예시문이나 안내글을 입력하세요" value={newAssessment.refText}
+                            onChange={e => setNewAssessment({ ...newAssessment, refText: e.target.value })}
+                            style={{ minHeight: '80px' }} />
+                        <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
+                        {newAssessment.refImageUrl && (
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                                <img src={newAssessment.refImageUrl} alt="참고 이미지" style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                <button
+                                    onClick={() => setNewAssessment({ ...newAssessment, refImageUrl: '' })}
+                                    style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
+                                >×</button>
+                            </div>
+                        )}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            disabled={refImageUploading}
+                            onChange={e => {
+                                const f = e.target.files[0];
+                                if (f) handleUploadRefImage(f, url => setNewAssessment(prev => ({ ...prev, refImageUrl: url })));
+                            }}
+                        />
+                        {refImageUploading && <p style={{ fontSize: '0.8rem', color: '#888', margin: 0 }}>이미지 업로드 중...</p>}
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>만점 (선택)</label>
                         <input type="number" placeholder="예: 100" min="1" value={newAssessment.maxScore}
                             onChange={e => setNewAssessment({ ...newAssessment, maxScore: e.target.value })} />

@@ -399,6 +399,18 @@ const StudentPortal = () => {
 
                                     {isOpen && (
                                         <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+                                            {/* 참고자료 표시 */}
+                                            {(item.RefText || item.RefImageUrl) && (
+                                                <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: '#fffde7', border: '1px solid #ffe082', borderRadius: '8px' }}>
+                                                    <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#f57f17', margin: '0 0 0.5rem' }}>참고 자료</p>
+                                                    {item.RefText && (
+                                                        <p style={{ fontSize: '0.9rem', color: '#333', margin: '0 0 0.5rem', whiteSpace: 'pre-wrap' }}>{item.RefText}</p>
+                                                    )}
+                                                    {item.RefImageUrl && (
+                                                        <img src={item.RefImageUrl} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                                    )}
+                                                </div>
+                                            )}
                                             {item.Type === '객관식' && questions.length > 0 && (
                                                 <MultipleChoiceSubmit questions={questions} answers={answers} onChange={setAnswers} />
                                             )}
