@@ -575,6 +575,7 @@ const TeacherDashboard = () => {
                     {isLoading ? <p className="empty-msg">불러오는 중...</p>
                         : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
                             : (
+                                <>
                                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>
                                         <input type="checkbox"
@@ -625,6 +626,7 @@ const TeacherDashboard = () => {
                                         </tbody>
                                     </table>
                                 </div>
+                                </>
                             )}
                 </div>
             )}
