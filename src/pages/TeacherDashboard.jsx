@@ -3,10 +3,23 @@ import './TeacherDashboard.css';
 
 const GAS_URL = '/api/gas';
 
-// 참고 이미지 표시 컴포넌트 (data URL 직접 표시)
+// 참고 이미지 표시 컴포넌트 (refimg:// → GAS에서 data URL 조회)
 const RefImage = ({ url, style }) => {
-    if (!url) return null;
-    return <img src={url} alt="참고 이미지" style={style} />;
+    const [src, setSrc] = useState('');
+    useEffect(() => {
+        if (!url) return;
+        if (url.startsWith('refimg://')) {
+            const imgId = url.replace('refimg://', '');
+            fetch(`${GAS_URL}?action=getRefImage&imgId=${encodeURIComponent(imgId)}`)
+                .then(r => r.json())
+                .then(d => { if (d.status === 'success') setSrc(d.dataUrl); })
+                .catch(() => {});
+        } else if (url.startsWith('data:')) {
+            setSrc(url);
+        }
+    }, [url]);
+    if (!src) return null;
+    return <img src={src} alt="참고 이미지" style={style} />;
 };
 const GRADES = [1, 2, 3];
 const TYPES = ['서답형', '객관식', '주관식 퀴즈', '파일 업로드'];
@@ -219,7 +232,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                             if (!f) return;
                             setEditRefUploading(true);
                             try {
-                                const dataUrl = await new Promise((resolve, reject) => {
+                                const base64 = await new Promise((resolve, reject) => {
                                     const reader = new FileReader();
                                     reader.onload = (ev) => {
                                         const img = new Image();
@@ -233,7 +246,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                                             const canvas = document.createElement('canvas');
                                             canvas.width = w; canvas.height = h;
                                             canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                                            resolve(canvas.toDataURL('image/jpeg', 0.7));
+                                            resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
                                         };
                                         img.onerror = reject;
                                         img.src = ev.target.result;
@@ -241,7 +254,13 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                                     reader.onerror = reject;
                                     reader.readAsDataURL(f);
                                 });
-                                setEditForm(prev => ({ ...prev, refImageUrl: dataUrl }));
+                                const res = await fetch(GAS_URL, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: f.name, mimeType: 'image/jpeg' }),
+                                });
+                                const data = await res.json();
+                                if (data.status === 'success') setEditForm(prev => ({ ...prev, refImageUrl: data.url }));
                             } catch {}
                             finally { setEditRefUploading(false); }
                         }}
@@ -404,12 +423,8 @@ const TeacherDashboard = () => {
 
     const handleUpdate = async (id, form) => {
         try {
-            // data URL이 길 수 있으므로 POST로 전송
-            const res = await fetch(GAS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'updateAssessment', id, ...form }),
-            });
+            const params = new URLSearchParams({ action: 'updateAssessment', id, ...form });
+            const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') await fetchAssessments();
             else setError('수정에 실패했습니다.');
@@ -523,12 +538,12 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
-    // 이미지를 500px로 리사이즈 후 data URL 반환 (GAS 저장 없이 직접 사용)
+    // 이미지를 500px로 리사이즈 후 GAS uploadRefMaterial에 저장, URL 반환
     const handleUploadRefImage = async (file, onSuccess) => {
         if (!file) return;
         setRefImageUploading(true);
         try {
-            const dataUrl = await new Promise((resolve, reject) => {
+            const base64 = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image();
@@ -542,7 +557,7 @@ const TeacherDashboard = () => {
                         const canvas = document.createElement('canvas');
                         canvas.width = w; canvas.height = h;
                         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                        resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
                     };
                     img.onerror = reject;
                     img.src = ev.target.result;
@@ -550,7 +565,14 @@ const TeacherDashboard = () => {
                 reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
-            onSuccess(dataUrl);
+            const res = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'uploadRefMaterial', fileData: base64, fileName: file.name, mimeType: 'image/jpeg' }),
+            });
+            const data = await res.json();
+            if (data.status === 'success') onSuccess(data.url);
+            else setError('이미지 업로드 실패: ' + (data.message || ''));
         } catch { setError('이미지 처리 중 오류가 발생했습니다.'); }
         finally { setRefImageUploading(false); }
     };
@@ -559,24 +581,20 @@ const TeacherDashboard = () => {
         if (!newAssessment.title.trim()) return;
         setIsLoading(true); setError('');
         try {
-            // data URL이 길 수 있으므로 POST로 전송
-            const res = await fetch(GAS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'createAssessment',
-                    title: newAssessment.title,
-                    description: newAssessment.description,
-                    criteria: newAssessment.criteria,
-                    deadline: newAssessment.deadline,
-                    grades: newAssessment.grades.join(','),
-                    type: newAssessment.type,
-                    questions: JSON.stringify(newAssessment.questions),
-                    maxScore: newAssessment.maxScore,
-                    refText: newAssessment.refText,
-                    refImageUrl: newAssessment.refImageUrl,
-                }),
+            const params = new URLSearchParams({
+                action: 'createAssessment',
+                title: newAssessment.title,
+                description: newAssessment.description,
+                criteria: newAssessment.criteria,
+                deadline: newAssessment.deadline,
+                grades: newAssessment.grades.join(','),
+                type: newAssessment.type,
+                questions: JSON.stringify(newAssessment.questions),
+                maxScore: newAssessment.maxScore,
+                refText: newAssessment.refText,
+                refImageUrl: newAssessment.refImageUrl,
             });
+            const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
                 setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '', refText: '', refImageUrl: '' });
