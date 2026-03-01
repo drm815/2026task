@@ -225,7 +225,11 @@ const StudentPortal = () => {
             content = JSON.stringify(answers);
         } else {
             const qs = (() => { try { return JSON.parse(item.Questions || '[]'); } catch { return []; } })();
-            content = qs.map((q, i) => `${i + 1}. ${q.question}\n답: ${answers[i] || ''}`).join('\n\n');
+            if (qs.length > 0) {
+                content = qs.map((q, i) => `${i + 1}. ${q.question}\n답: ${answers[i] || ''}`).join('\n\n');
+            } else {
+                content = answers[0] || '';
+            }
         }
 
         try {

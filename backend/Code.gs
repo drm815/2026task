@@ -52,8 +52,12 @@ function doPost(e) {
   }
 }
 
+// 비밀번호 설정은 GAS 에디터에서 직접 실행하세요:
+// PropertiesService.getScriptProperties().setProperty('TEACHER_PASSWORD', '원하는비밀번호');
 function setPassword() {
-  PropertiesService.getScriptProperties().setProperty('TEACHER_PASSWORD', 'love0310##');
+  // 보안: 비밀번호를 코드에 하드코딩하지 않습니다.
+  // GAS 에디터 상단 메뉴 > 실행 > 함수 실행에서 아래 한 줄을 직접 실행하세요.
+  throw new Error('비밀번호를 코드에 직접 입력하지 마세요. GAS 에디터 콘솔에서 직접 설정하세요.');
 }
 
 function isValidGrade(v)    { return Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 6; }
