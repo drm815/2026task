@@ -221,6 +221,7 @@ const extractAnswers = (content) => {
 // ── 채점 행 ─────────────────────────────────────────────────────────
 const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) => {
     const [score, setScore] = useState(s.Score || '');
+    useEffect(() => { setScore(s.Score || ''); }, [s.Score]);
     return (
         <tr>
             <td><input type="checkbox" checked={checked} onChange={e => onCheck(e.target.checked)} /></td>
