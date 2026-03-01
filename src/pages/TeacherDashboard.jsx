@@ -21,6 +21,7 @@ const RefImage = ({ url, style }) => {
     if (!src) return null;
     return <img src={src} alt="참고 이미지" style={style} />;
 };
+
 const GRADES = [1, 2, 3];
 const TYPES = ['서답형', '객관식', '주관식 퀴즈', '파일 업로드'];
 
@@ -118,8 +119,23 @@ const ShortAnswerEditor = ({ questions, onChange, type }) => {
     );
 };
 
+// ── 마감 D-day 뱃지 ─────────────────────────────────────────────────
+const DeadlineBadge = ({ deadline }) => {
+    if (!deadline) return null;
+    const now = new Date();
+    const dl = new Date(deadline);
+    const diffMs = dl - now;
+    if (diffMs < 0) return <span style={{ fontSize: '0.75rem', color: '#fff', background: '#e53935', borderRadius: '4px', padding: '2px 6px', marginLeft: '0.5rem' }}>마감됨</span>;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays <= 3) {
+        const label = diffDays === 0 ? 'D-day' : `D-${diffDays}`;
+        return <span style={{ fontSize: '0.75rem', color: '#fff', background: '#f57c00', borderRadius: '4px', padding: '2px 6px', marginLeft: '0.5rem' }}>{label}</span>;
+    }
+    return <span style={{ fontSize: '0.8rem', color: '#555', marginLeft: '0.5rem' }}>기한: {dl.toLocaleString('ko-KR')}</span>;
+};
+
 // ── 평가 항목 카드 ──────────────────────────────────────────────────
-const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, onToggleVisibility }) => {
+const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, onToggleVisibility, onCopy }) => {
     const [editingDeadline, setEditingDeadline] = useState(false);
     const [editingContent, setEditingContent] = useState(false);
     const [deadline, setDeadline] = useState(item.Deadline ? new Date(item.Deadline).toISOString().slice(0, 16) : '');
@@ -158,11 +174,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                         {String(item.Grades).split(',').filter(Boolean).map(g => `${g}학년`).join(' ')}
                     </span>
                 )}
-                {item.Deadline && (
-                    <span style={{ fontSize: '0.8rem', color: isPast ? 'red' : '#555', marginLeft: '0.5rem' }}>
-                        {isPast ? '마감됨' : `기한: ${new Date(item.Deadline).toLocaleString('ko-KR')}`}
-                    </span>
-                )}
+                <DeadlineBadge deadline={item.Deadline} />
             </div>
 
             {editingDeadline && (
@@ -286,6 +298,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                 </button>
                 <button onClick={() => setEditingDeadline(v => !v)}>기한 수정</button>
                 <button onClick={() => setEditingContent(v => !v)}>내용 수정</button>
+                <button onClick={() => onCopy(item)} style={{ color: '#1a73e8' }}>복사</button>
                 <button onClick={() => { if (window.confirm(`"${item.Title}" 평가를 삭제할까요?`)) onDelete(item.ID); }} style={{ color: 'red' }}>삭제</button>
             </div>
         </div>
@@ -300,32 +313,52 @@ const extractAnswers = (content) => {
     return answers.length > 0 ? answers.join(' / ') : content;
 };
 
-// ── 채점 행 ─────────────────────────────────────────────────────────
+// ── 채점 행 (미리보기 포함) ──────────────────────────────────────────
 const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) => {
     const [score, setScore] = useState(s.Score || '');
+    const [expanded, setExpanded] = useState(false);
     useEffect(() => { setScore(s.Score || ''); }, [s.Score]);
+
+    const contentPreview = assessmentType === '파일 업로드'
+        ? (s.FileURL ? <a href={s.FileURL} target="_blank" rel="noreferrer" className="file-link">파일 보기</a> : '-')
+        : assessmentType === '주관식 퀴즈' || assessmentType === '서답형'
+            ? extractAnswers(s.Content)
+            : s.Content;
+
+    const hasFullContent = s.Content && s.Content.length > 30 && assessmentType !== '파일 업로드';
+
     return (
-        <tr>
-            <td><input type="checkbox" checked={checked} onChange={e => onCheck(e.target.checked)} /></td>
-            <td>{s.Grade}</td>
-            <td>{s.Class}</td>
-            <td>{s.Number}</td>
-            <td>{s.Name}</td>
-            <td className="content-cell">
-                {assessmentType === '파일 업로드'
-                    ? (s.FileURL ? <a href={s.FileURL} target="_blank" rel="noreferrer" className="file-link">파일 보기</a> : '-')
-                    : assessmentType === '주관식 퀴즈' || assessmentType === '서답형'
-                        ? extractAnswers(s.Content)
-                        : s.Content}
-            </td>
-            <td>
-                <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
-            </td>
-            <td><button onClick={() => onSave(s, score)} className="save-btn">저장</button></td>
-            <td style={{ textAlign: 'center', color: s.IsScorePublic ? '#4caf50' : '#aaa', fontSize: '0.8rem' }}>
-                {s.IsScorePublic ? '공개' : '비공개'}
-            </td>
-        </tr>
+        <>
+            <tr>
+                <td><input type="checkbox" checked={checked} onChange={e => onCheck(e.target.checked)} /></td>
+                <td>{s.Grade}</td>
+                <td>{s.Class}</td>
+                <td>{s.Number}</td>
+                <td>{s.Name}</td>
+                <td className="content-cell">
+                    <span style={{ cursor: hasFullContent ? 'pointer' : 'default' }} onClick={() => hasFullContent && setExpanded(v => !v)}>
+                        {contentPreview}
+                        {hasFullContent && <span style={{ fontSize: '0.75rem', color: '#1a73e8', marginLeft: '0.25rem' }}>{expanded ? '▲' : '▼'}</span>}
+                    </span>
+                </td>
+                <td>
+                    <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
+                </td>
+                <td><button onClick={() => onSave(s, score)} className="save-btn">저장</button></td>
+                <td style={{ textAlign: 'center', color: s.IsScorePublic ? '#4caf50' : '#aaa', fontSize: '0.8rem' }}>
+                    {s.IsScorePublic ? '공개' : '비공개'}
+                </td>
+            </tr>
+            {expanded && (
+                <tr>
+                    <td colSpan={9}>
+                        <div style={{ background: '#f8f9fa', borderRadius: '6px', padding: '0.75rem 1rem', fontSize: '0.9rem', whiteSpace: 'pre-wrap', color: '#333', margin: '0 0.25rem 0.25rem' }}>
+                            {s.Content}
+                        </div>
+                    </td>
+                </tr>
+            )}
+        </>
     );
 };
 
@@ -341,10 +374,18 @@ const TeacherDashboard = () => {
     const [refImageFile, setRefImageFile] = useState(null);
     const [refImageUploading, setRefImageUploading] = useState(false);
     const [submissions, setSubmissions] = useState([]);
+    const [allSubmissions, setAllSubmissions] = useState([]); // 전체 제출 (학생 이력용)
     const [selectedAssessment, setSelectedAssessment] = useState(null);
     const [checkedRows, setCheckedRows] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // 채점 패널 탭: 'grading' | 'unsubmitted' | 'stats' | 'history'
+    const [gradingTab, setGradingTab] = useState('grading');
+    // 학생 이력 선택
+    const [historyStudent, setHistoryStudent] = useState(null);
+    // 평가 정렬 순서
+    const [sortOrder, setSortOrder] = useState('default'); // 'default' | 'deadline' | 'title'
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -390,12 +431,15 @@ const TeacherDashboard = () => {
     };
 
     const fetchSubmissions = async (assessment) => {
-        setSelectedAssessment(assessment); setSubmissions([]); setCheckedRows({});
+        setSelectedAssessment(assessment); setSubmissions([]); setAllSubmissions([]); setCheckedRows({});
+        setGradingTab('grading'); setHistoryStudent(null);
         setIsLoading(true); setError('');
         try {
             const res = await fetch(`${GAS_URL}?action=getSubmissions`);
             const data = await res.json();
-            setSubmissions(Array.isArray(data) ? data.filter(s => s.AssessmentID === assessment.ID) : []);
+            const all = Array.isArray(data) ? data : [];
+            setAllSubmissions(all);
+            setSubmissions(all.filter(s => s.AssessmentID === assessment.ID));
         } catch { setError('제출 목록을 불러오지 못했습니다.'); }
         finally { setIsLoading(false); }
     };
@@ -406,7 +450,10 @@ const TeacherDashboard = () => {
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success')
-                setSubmissions(prev => prev.map(s => s.Number === submission.Number ? { ...s, Score: score } : s));
+                setSubmissions(prev => prev.map(s =>
+                    s.Grade === submission.Grade && s.Class === submission.Class && s.Number === submission.Number && s.AssessmentID === submission.AssessmentID
+                        ? { ...s, Score: score } : s
+                ));
         } catch { setError('점수 저장에 실패했습니다.'); }
     };
 
@@ -442,6 +489,32 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
+    // ── 평가 복사 ────────────────────────────────────────────────────
+    const handleCopy = async (item) => {
+        if (!window.confirm(`"${item.Title}" 평가를 복사할까요?`)) return;
+        setIsLoading(true); setError('');
+        try {
+            const params = new URLSearchParams({
+                action: 'createAssessment',
+                title: `${item.Title} (복사본)`,
+                description: item.Description || '',
+                criteria: item.Criteria || '',
+                deadline: item.Deadline ? new Date(item.Deadline).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                grades: item.Grades || '',
+                type: item.Type || '서답형',
+                questions: item.Questions || '[]',
+                maxScore: item.MaxScore || '',
+                refText: item.RefText || '',
+                refImageUrl: item.RefImageUrl || '',
+            });
+            const res = await fetch(`${GAS_URL}?${params}`);
+            const data = await res.json();
+            if (data.status === 'success') await fetchAssessments();
+            else setError('복사에 실패했습니다.');
+        } catch { setError('서버 연결에 실패했습니다.'); }
+        finally { setIsLoading(false); }
+    };
+
     const handleBulkSetScore = async (score) => {
         const targets = submissions.filter((_, i) => checkedRows[i]);
         if (targets.length === 0) { setError('학생을 선택해주세요.'); return; }
@@ -461,7 +534,6 @@ const TeacherDashboard = () => {
                 return fetch(`${GAS_URL}?${params}`);
             }));
         } catch {}
-        // 저장 후 서버에서 최신 데이터 다시 로드
         await fetchSubmissions(selectedAssessment);
     };
 
@@ -487,7 +559,6 @@ const TeacherDashboard = () => {
             const allSubs = await res.json();
             if (!Array.isArray(allSubs) || allSubs.length === 0) return;
 
-            // 학년별 그룹핑
             const gradeGroups = {};
             allSubs.forEach(s => {
                 const g = s.Grade;
@@ -497,14 +568,11 @@ const TeacherDashboard = () => {
                 gradeGroups[g][key].scores[s.AssessmentID] = s.Score;
             });
 
-            // 평가 제목 맵
             const assessmentMap = {};
             assessments.forEach(a => { assessmentMap[a.ID] = a.Title; });
 
-            // 학년별 CSV 생성 및 다운로드
             Object.keys(gradeGroups).sort().forEach(grade => {
                 const students = Object.values(gradeGroups[grade]).sort((a, b) => a.Class - b.Class || a.Number - b.Number);
-                // 이 학년에 해당하는 평가 목록
                 const gradeAssessments = assessments.filter(a => {
                     if (!a.Grades || String(a.Grades).trim() === '') return true;
                     return String(a.Grades).split(',').map(g => g.trim()).includes(String(grade));
@@ -538,7 +606,6 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
-    // 이미지를 500px로 리사이즈 후 GAS uploadRefMaterial에 저장, URL 반환
     const handleUploadRefImage = async (file, onSuccess) => {
         if (!file) return;
         setRefImageUploading(true);
@@ -604,6 +671,85 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
         finally { setIsLoading(false); }
     };
+
+    // ── 점수 통계 계산 ───────────────────────────────────────────────
+    const calcStats = (subs) => {
+        const scored = subs.filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined && !isNaN(Number(s.Score)));
+        if (scored.length === 0) return null;
+        const nums = scored.map(s => Number(s.Score));
+        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+        return {
+            count: scored.length,
+            avg: avg.toFixed(1),
+            max: Math.max(...nums),
+            min: Math.min(...nums),
+        };
+    };
+
+    // ── 미제출 학생 계산 (제출자 목록 - 전체 학생 개념은 없으므로 학년별 기제출자 외 표시) ──
+    const getUnsubmitted = () => {
+        // 현재 평가 기제출자 key
+        const submittedKeys = new Set(submissions.map(s => `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`));
+        // 다른 평가에서 확인된 전체 학생 (allSubmissions 기준)
+        const allStudentKeys = new Set();
+        const allStudents = {};
+        allSubmissions.forEach(s => {
+            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
+            if (!allStudentKeys.has(key)) {
+                allStudentKeys.add(key);
+                allStudents[key] = { Grade: s.Grade, Class: s.Class, Number: s.Number, Name: s.Name };
+            }
+        });
+        // 해당 평가 학년 필터
+        const aGrades = selectedAssessment?.Grades ? String(selectedAssessment.Grades).split(',').filter(Boolean) : [];
+        return Object.values(allStudents)
+            .filter(st => {
+                if (aGrades.length > 0 && !aGrades.includes(String(st.Grade))) return false;
+                return !submittedKeys.has(`${st.Grade}-${st.Class}-${st.Number}-${st.Name}`);
+            })
+            .sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
+    };
+
+    // ── 학생별 제출 이력 ─────────────────────────────────────────────
+    const getStudentHistory = (student) => {
+        if (!student) return [];
+        return allSubmissions
+            .filter(s => s.Grade == student.Grade && s.Class == student.Class && s.Number == student.Number && s.Name === student.Name)
+            .map(s => {
+                const assessment = assessments.find(a => a.ID === s.AssessmentID);
+                return { ...s, AssessmentTitle: assessment?.Title || s.AssessmentID };
+            });
+    };
+
+    // ── 평가 목록 정렬 ───────────────────────────────────────────────
+    const getSortedAssessments = (list) => {
+        if (sortOrder === 'deadline') {
+            return [...list].sort((a, b) => {
+                if (!a.Deadline) return 1;
+                if (!b.Deadline) return -1;
+                return new Date(a.Deadline) - new Date(b.Deadline);
+            });
+        }
+        if (sortOrder === 'title') {
+            return [...list].sort((a, b) => String(a.Title).localeCompare(String(b.Title), 'ko'));
+        }
+        return list;
+    };
+
+    const stats = calcStats(submissions);
+    const unsubmitted = selectedAssessment ? getUnsubmitted() : [];
+    const studentHistory = getStudentHistory(historyStudent);
+
+    // 고유 학생 목록 (이력 조회용)
+    const uniqueStudents = (() => {
+        const seen = new Set();
+        return allSubmissions.filter(s => {
+            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
+    })();
 
     return (
         <div className="teacher-dashboard fade-in">
@@ -705,13 +851,20 @@ const TeacherDashboard = () => {
 
                 {/* 평가 목록 */}
                 <div className="glass-card p-6">
-                    <h3>진행 중인 평가 목록</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <h3 style={{ margin: 0 }}>진행 중인 평가 목록</h3>
+                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value)}
+                            style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #ddd' }}>
+                            <option value="default">등록 순</option>
+                            <option value="deadline">마감일 순</option>
+                            <option value="title">제목 순</option>
+                        </select>
+                    </div>
                     {error && <p className="error-msg">{error}</p>}
                     <div className="assessment-list">
                         {isLoading ? <p className="empty-msg">불러오는 중...</p>
                             : assessments.length === 0 ? <p className="empty-msg">등록된 평가가 없습니다.</p>
                                 : (() => {
-                                    // 학년별 그룹핑: 학년 미지정은 '전체' 그룹
                                     const groups = {};
                                     assessments.forEach(item => {
                                         const gs = item.Grades ? String(item.Grades).split(',').filter(Boolean) : [];
@@ -731,13 +884,14 @@ const TeacherDashboard = () => {
                                             <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#1a73e8', borderBottom: '2px solid #1a73e8', padding: '0.25rem 0', marginBottom: '0.5rem', marginTop: '0.75rem' }}>
                                                 {grade}
                                             </div>
-                                            {groups[grade].map(item => (
+                                            {getSortedAssessments(groups[grade]).map(item => (
                                                 <AssessmentItem key={item.ID} item={item}
                                                     onGrade={() => fetchSubmissions(item)}
                                                     onUpdateDeadline={handleUpdateDeadline}
                                                     onUpdate={handleUpdate}
                                                     onDelete={handleDelete}
-                                                    onToggleVisibility={handleToggleVisibility} />
+                                                    onToggleVisibility={handleToggleVisibility}
+                                                    onCopy={handleCopy} />
                                             ))}
                                         </div>
                                     ));
@@ -764,68 +918,227 @@ const TeacherDashboard = () => {
                                     </div>
                                 ) : null;
                             })()}
+                            {/* 점수 통계 */}
+                            {stats && (
+                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                    {[
+                                        { label: '제출', value: `${stats.count}명` },
+                                        { label: '평균', value: `${stats.avg}점` },
+                                        { label: '최고', value: `${stats.max}점` },
+                                        { label: '최저', value: `${stats.min}점` },
+                                    ].map(({ label, value }) => (
+                                        <span key={label} style={{ fontSize: '0.8rem', background: '#e8f4fd', color: '#1a73e8', borderRadius: '4px', padding: '2px 8px' }}>
+                                            {label}: <strong>{value}</strong>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                             <button className="btn-outline" onClick={handleDownloadCSV}>학년별 CSV 다운로드</button>
-                            <button className="btn-text" onClick={() => { setSelectedAssessment(null); setSubmissions([]); }}>닫기</button>
+                            <button className="btn-text" onClick={() => { setSelectedAssessment(null); setSubmissions([]); setAllSubmissions([]); }}>닫기</button>
                         </div>
                     </div>
-                    {isLoading ? <p className="empty-msg">불러오는 중...</p>
-                        : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
-                            : (
-                                <>
-                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                                        <input type="checkbox"
-                                            checked={submissions.length > 0 && submissions.every((_, i) => checkedRows[i])}
-                                            onChange={e => {
-                                                const next = {};
-                                                if (e.target.checked) submissions.forEach((_, i) => { next[i] = true; });
-                                                setCheckedRows(next);
-                                            }} />
-                                        전체선택
-                                    </label>
-                                    {selectedAssessment.MaxScore && (
-                                        <button onClick={() => handleBulkSetScore(selectedAssessment.MaxScore)}
-                                            style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            선택 만점({selectedAssessment.MaxScore}점) 부여
-                                        </button>
-                                    )}
-                                    <button onClick={() => handleBulkScorePublic(true)}
-                                        style={{ background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                        선택 공개
-                                    </button>
-                                    <button onClick={() => handleBulkScorePublic(false)}
-                                        style={{ background: '#e57373', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                        선택 비공개
-                                    </button>
-                                    <span style={{ fontSize: '0.8rem', color: '#888' }}>{Object.values(checkedRows).filter(Boolean).length}명 선택됨</span>
-                                </div>
-                                <div className="table-container">
-                                    <table className="grading-table">
-                                        <thead>
-                                            <tr>
-                                                <th></th>
-                                                <th>학년</th>
-                                                <th>반</th>
-                                                <th>번호</th>
-                                                <th>이름</th>
-                                                <th className="content-col">내용/파일</th>
-                                                <th>점수</th>
-                                                <th>저장</th>
-                                                <th>공개여부</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {submissions.map((s, i) => (
-                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type}
-                                                    checked={!!checkedRows[i]} onCheck={v => setCheckedRows(prev => ({ ...prev, [i]: v }))} />
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                </>
+
+                    {/* 탭 */}
+                    <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.5rem' }}>
+                        {[
+                            { id: 'grading', label: `채점 (${submissions.length}명)` },
+                            { id: 'unsubmitted', label: `미제출 (${unsubmitted.length}명)` },
+                            { id: 'stats', label: '점수 통계' },
+                            { id: 'history', label: '학생별 이력' },
+                        ].map(tab => (
+                            <button key={tab.id} onClick={() => setGradingTab(tab.id)}
+                                style={{
+                                    padding: '0.3rem 0.75rem', fontSize: '0.85rem', cursor: 'pointer', border: 'none',
+                                    borderRadius: '4px 4px 0 0',
+                                    background: gradingTab === tab.id ? '#1a73e8' : '#f5f5f5',
+                                    color: gradingTab === tab.id ? '#fff' : '#555',
+                                }}>
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {isLoading ? <p className="empty-msg">불러오는 중...</p> : (
+                        <>
+                            {/* 채점 탭 */}
+                            {gradingTab === 'grading' && (
+                                submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p> : (
+                                    <>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                                                <input type="checkbox"
+                                                    checked={submissions.length > 0 && submissions.every((_, i) => checkedRows[i])}
+                                                    onChange={e => {
+                                                        const next = {};
+                                                        if (e.target.checked) submissions.forEach((_, i) => { next[i] = true; });
+                                                        setCheckedRows(next);
+                                                    }} />
+                                                전체선택
+                                            </label>
+                                            {selectedAssessment.MaxScore && (
+                                                <button onClick={() => handleBulkSetScore(selectedAssessment.MaxScore)}
+                                                    style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                    선택 만점({selectedAssessment.MaxScore}점) 부여
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleBulkScorePublic(true)}
+                                                style={{ background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                선택 공개
+                                            </button>
+                                            <button onClick={() => handleBulkScorePublic(false)}
+                                                style={{ background: '#e57373', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                선택 비공개
+                                            </button>
+                                            <span style={{ fontSize: '0.8rem', color: '#888' }}>{Object.values(checkedRows).filter(Boolean).length}명 선택됨</span>
+                                        </div>
+                                        <div className="table-container">
+                                            <table className="grading-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th></th>
+                                                        <th>학년</th>
+                                                        <th>반</th>
+                                                        <th>번호</th>
+                                                        <th>이름</th>
+                                                        <th className="content-col">내용/파일</th>
+                                                        <th>점수</th>
+                                                        <th>저장</th>
+                                                        <th>공개여부</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {submissions.map((s, i) => (
+                                                        <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type}
+                                                            checked={!!checkedRows[i]} onCheck={v => setCheckedRows(prev => ({ ...prev, [i]: v }))} />
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                )
                             )}
+
+                            {/* 미제출 탭 */}
+                            {gradingTab === 'unsubmitted' && (
+                                unsubmitted.length === 0
+                                    ? <p className="empty-msg">미제출 학생이 없거나 확인할 수 없습니다. (다른 평가 제출 이력 기준)</p>
+                                    : (
+                                        <div className="table-container">
+                                            <table className="grading-table">
+                                                <thead>
+                                                    <tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    {unsubmitted.map((s, i) => (
+                                                        <tr key={i}>
+                                                            <td>{s.Grade}</td>
+                                                            <td>{s.Class}</td>
+                                                            <td>{s.Number}</td>
+                                                            <td>{s.Name}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )
+                            )}
+
+                            {/* 점수 통계 탭 */}
+                            {gradingTab === 'stats' && (
+                                <div>
+                                    {!stats ? <p className="empty-msg">채점된 점수가 없습니다.</p> : (
+                                        <>
+                                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                                                {[
+                                                    { label: '채점 완료', value: `${stats.count}명`, color: '#1a73e8' },
+                                                    { label: '평균 점수', value: `${stats.avg}점`, color: '#4caf50' },
+                                                    { label: '최고 점수', value: `${stats.max}점`, color: '#f57c00' },
+                                                    { label: '최저 점수', value: `${stats.min}점`, color: '#e53935' },
+                                                ].map(({ label, value, color }) => (
+                                                    <div key={label} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1rem 1.5rem', textAlign: 'center', minWidth: '100px' }}>
+                                                        <p style={{ margin: '0 0 0.25rem', fontSize: '0.8rem', color: '#888' }}>{label}</p>
+                                                        <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color }}>{value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="table-container">
+                                                <table className="grading-table">
+                                                    <thead>
+                                                        <tr><th>학년</th><th>반</th><th>번호</th><th>이름</th><th>점수</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {[...submissions]
+                                                            .filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined)
+                                                            .sort((a, b) => Number(b.Score) - Number(a.Score))
+                                                            .map((s, i) => (
+                                                                <tr key={i}>
+                                                                    <td>{s.Grade}</td>
+                                                                    <td>{s.Class}</td>
+                                                                    <td>{s.Number}</td>
+                                                                    <td>{s.Name}</td>
+                                                                    <td style={{ fontWeight: 'bold', color: '#1a73e8' }}>{s.Score}점</td>
+                                                                </tr>
+                                                            ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* 학생별 이력 탭 */}
+                            {gradingTab === 'history' && (
+                                <div>
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label style={{ fontSize: '0.85rem', color: '#666', marginRight: '0.5rem' }}>학생 선택:</label>
+                                        <select
+                                            value={historyStudent ? `${historyStudent.Grade}-${historyStudent.Class}-${historyStudent.Number}-${historyStudent.Name}` : ''}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                if (!val) { setHistoryStudent(null); return; }
+                                                const [grade, cls, number, ...nameParts] = val.split('-');
+                                                setHistoryStudent({ Grade: grade, Class: cls, Number: number, Name: nameParts.join('-') });
+                                            }}
+                                            style={{ padding: '0.3rem 0.5rem', borderRadius: '4px', border: '1px solid #ddd', fontSize: '0.85rem' }}
+                                        >
+                                            <option value="">-- 학생을 선택하세요 --</option>
+                                            {uniqueStudents.map(s => (
+                                                <option key={`${s.Grade}-${s.Class}-${s.Number}-${s.Name}`} value={`${s.Grade}-${s.Class}-${s.Number}-${s.Name}`}>
+                                                    {s.Grade}학년 {s.Class}반 {s.Number}번 {s.Name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {historyStudent && (
+                                        studentHistory.length === 0
+                                            ? <p className="empty-msg">제출 이력이 없습니다.</p>
+                                            : (
+                                                <div className="table-container">
+                                                    <table className="grading-table">
+                                                        <thead>
+                                                            <tr><th>평가명</th><th>제출 시각</th><th>점수</th><th>공개</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {studentHistory.map((s, i) => (
+                                                                <tr key={i}>
+                                                                    <td>{s.AssessmentTitle}</td>
+                                                                    <td style={{ fontSize: '0.8rem', color: '#666' }}>{s.Timestamp ? new Date(s.Timestamp).toLocaleString('ko-KR') : '-'}</td>
+                                                                    <td style={{ fontWeight: 'bold', color: '#1a73e8' }}>{s.Score !== '' && s.Score !== null ? `${s.Score}점` : '미채점'}</td>
+                                                                    <td style={{ color: s.IsScorePublic ? '#4caf50' : '#aaa', fontSize: '0.8rem' }}>{s.IsScorePublic ? '공개' : '비공개'}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             )}
         </div>

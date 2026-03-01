@@ -26,6 +26,21 @@ const RefImage = ({ url }) => {
     return <img src={src} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />;
 };
 
+// ── 마감 D-day 뱃지 ─────────────────────────────────────────────────
+const DeadlineBadge = ({ deadline, isPast }) => {
+    if (!deadline) return null;
+    if (isPast) return null; // 카드에서 이미 마감됨 표시
+    const diffMs = new Date(deadline) - new Date();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays > 3) return null;
+    const label = diffDays <= 0 ? 'D-day' : `D-${diffDays}`;
+    return (
+        <span style={{ fontSize: '0.75rem', color: '#fff', background: '#f57c00', borderRadius: '4px', padding: '2px 6px' }}>
+            {label}
+        </span>
+    );
+};
+
 // ── 객관식 제출 UI ───────────────────────────────────────────────────
 const MultipleChoiceSubmit = ({ questions, answers, onChange }) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -404,6 +419,7 @@ const StudentPortal = () => {
                                                 제출 완료
                                             </span>
                                         )}
+                                        <DeadlineBadge deadline={item.Deadline} isPast={isPast} />
                                     </div>
 
                                     {(item.Type === '주관식 퀴즈' || item.Type === '서답형') && questions.length > 0 && (
