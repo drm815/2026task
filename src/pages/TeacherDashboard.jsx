@@ -359,10 +359,10 @@ const TeacherDashboard = () => {
 
     const handleBulkSetScore = async (score) => {
         const targets = submissions.filter((_, i) => checkedRows[i]);
-        if (targets.length === 0) return;
+        if (targets.length === 0) { setError('학생을 선택해주세요.'); return; }
         try {
             await Promise.all(targets.map(s => {
-                const params = new URLSearchParams({ action: 'updateScore', grade: s.Grade, class: s.Class, number: s.Number, assessmentID: s.AssessmentID, score });
+                const params = new URLSearchParams({ action: 'updateScore', grade: s.Grade, class: s.Class, number: s.Number, name: s.Name, assessmentID: s.AssessmentID, score: String(score) });
                 return fetch(`${GAS_URL}?${params}`);
             }));
             setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, Score: score } : s));

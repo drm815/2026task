@@ -46,10 +46,16 @@ const ShortAnswerSubmit = ({ questions, answers, onChange }) => (
 
 // ── 메인 학생 포털 ───────────────────────────────────────────────────
 const StudentPortal = () => {
+    // 단계: 'login' → 'code' → 'portal'
+    const [step, setStep] = useState('login');
     const [studentInfo, setStudentInfo] = useState({ grade: '', class: '', number: '', name: '' });
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [studentCode, setStudentCode] = useState(''); // 인증된 코드
+    const [codeInput, setCodeInput] = useState('');
+    const [codeError, setCodeError] = useState('');
+    const [newCodeNotice, setNewCodeNotice] = useState(''); // 신규 발급 코드 안내
+
     const [assessments, setAssessments] = useState([]);
-    const [submittedIDs, setSubmittedIDs] = useState([]); // 이미 제출한 평가 ID 목록
+    const [submittedIDs, setSubmittedIDs] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(null);
@@ -57,15 +63,13 @@ const StudentPortal = () => {
     const [file, setFile] = useState(null);
     const [submitMsg, setSubmitMsg] = useState('');
 
-    // 점수 조회용
-    const [scoreCode, setScoreCode] = useState('');
-    const [scoreCodeInput, setScoreCodeInput] = useState('');
-    const [scoreCodeVerified, setScoreCodeVerified] = useState(false);
-    const [scoreCodeError, setScoreCodeError] = useState('');
+    // 점수 조회
     const [myScores, setMyScores] = useState([]);
+    const [scoresLoaded, setScoresLoaded] = useState(false);
 
+    // 코드 인증 성공 후 데이터 로드
     useEffect(() => {
-        if (!isLoggedIn) return;
+        if (step !== 'portal') return;
         const { grade, class: cls, number, name } = studentInfo;
 
         const fetchAssessments = async () => {
@@ -91,45 +95,65 @@ const StudentPortal = () => {
             } catch {}
         };
 
+        const fetchMyScores = async () => {
+            try {
+                const params = new URLSearchParams({ action: 'getMyScores', grade, class: cls, number, name, code: studentCode });
+                const res = await fetch(`${GAS_URL}?${params}`);
+                const data = await res.json();
+                setMyScores(Array.isArray(data) ? data : []);
+                setScoresLoaded(true);
+            } catch {}
+        };
+
         fetchAssessments();
         fetchMySubmissions();
-    }, [isLoggedIn]);
+        fetchMyScores();
+    }, [step]);
 
+    // 1단계: 학번+이름 입력
     const handleLogin = (e) => {
         e.preventDefault();
         if (studentInfo.grade && studentInfo.class && studentInfo.number && studentInfo.name)
-            setIsLoggedIn(true);
+            setStep('code');
     };
 
-    const handleVerifyScoreCode = async (e) => {
+    // 2단계: 코드 인증
+    const handleVerifyCode = async (e) => {
         e.preventDefault();
-        setScoreCodeError('');
+        setCodeError('');
         const { grade, class: cls, number, name } = studentInfo;
         try {
-            const params = new URLSearchParams({ action: 'verifyStudentCode', grade, class: cls, number, name, code: scoreCodeInput });
+            const params = new URLSearchParams({ action: 'verifyStudentCode', grade, class: cls, number, name, code: codeInput });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
-                setScoreCode(scoreCodeInput);
-                setScoreCodeVerified(true);
-                // 점수 조회
-                const params2 = new URLSearchParams({ action: 'getMyScores', grade, class: cls, number, name, code: scoreCodeInput });
-                const res2 = await fetch(`${GAS_URL}?${params2}`);
-                const data2 = await res2.json();
-                setMyScores(Array.isArray(data2) ? data2 : []);
+                setStudentCode(codeInput);
+                setStep('portal');
             } else {
-                setScoreCodeError(data.message || '코드가 올바르지 않습니다.');
+                setCodeError(data.message || '코드가 올바르지 않습니다.');
             }
-        } catch { setScoreCodeError('서버 오류가 발생했습니다.'); }
+        } catch { setCodeError('서버 오류가 발생했습니다.'); }
     };
 
-    const openSubmit = (item) => {
-        setSubmitting(item.ID);
-        setAnswers({});
-        setFile(null);
-        setSubmitMsg('');
+    // 코드 없는 학생 - 첫 발급 요청
+    const handleIssueCode = async () => {
+        setCodeError('');
+        setNewCodeNotice('');
+        const { grade, class: cls, number, name } = studentInfo;
+        try {
+            // 빈 제출로 코드 자동 생성 트리거 대신, getOrCreate를 직접 호출
+            const params = new URLSearchParams({ action: 'issueStudentCode', grade, class: cls, number, name });
+            const res = await fetch(`${GAS_URL}?${params}`);
+            const data = await res.json();
+            if (data.status === 'success' && data.code) {
+                setNewCodeNotice(data.code);
+            } else {
+                setCodeError('코드 발급에 실패했습니다. 선생님께 문의하세요.');
+            }
+        } catch { setCodeError('서버 오류가 발생했습니다.'); }
     };
 
+    // 제출 처리
     const handleSubmit = async (item) => {
         setSubmitMsg('');
         const { grade, class: cls, number, name } = studentInfo;
@@ -153,6 +177,7 @@ const StudentPortal = () => {
                             fileName: `${grade}-${cls}-${number}-${name}${ext}`,
                             fileData: base64,
                             mimeType: file.type,
+                            code: studentCode,
                         }),
                     });
                     const data = await res.json();
@@ -176,7 +201,7 @@ const StudentPortal = () => {
         }
 
         try {
-            const params = new URLSearchParams({ action: 'submitAssignment', grade, class: cls, number, name, assessmentID: item.ID, content });
+            const params = new URLSearchParams({ action: 'submitAssignment', grade, class: cls, number, name, assessmentID: item.ID, content, code: studentCode });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
@@ -193,7 +218,27 @@ const StudentPortal = () => {
         } catch { setSubmitMsg('서버 오류'); }
     };
 
-    if (!isLoggedIn) {
+    const openSubmit = (item) => {
+        setSubmitting(item.ID);
+        setAnswers({});
+        setFile(null);
+        setSubmitMsg('');
+    };
+
+    const resetAll = () => {
+        setStep('login');
+        setStudentCode('');
+        setCodeInput('');
+        setCodeError('');
+        setNewCodeNotice('');
+        setMyScores([]);
+        setScoresLoaded(false);
+        setSubmittedIDs([]);
+        setAssessments([]);
+    };
+
+    // ── 1단계: 로그인 ───────────────────────────────────────────────
+    if (step === 'login') {
         return (
             <div className="login-container fade-in">
                 <div className="glass-card login-box">
@@ -208,18 +253,61 @@ const StudentPortal = () => {
                             <input type="number" placeholder="번호" required value={studentInfo.number} onChange={e => setStudentInfo({ ...studentInfo, number: e.target.value })} />
                             <input type="text" placeholder="이름" required value={studentInfo.name} onChange={e => setStudentInfo({ ...studentInfo, name: e.target.value })} />
                         </div>
-                        <button type="submit" className="btn-primary w-full">확인</button>
+                        <button type="submit" className="btn-primary w-full">다음</button>
                     </form>
                 </div>
             </div>
         );
     }
 
+    // ── 2단계: 코드 인증 ────────────────────────────────────────────
+    if (step === 'code') {
+        return (
+            <div className="login-container fade-in">
+                <div className="glass-card login-box">
+                    <h2>본인 확인 코드</h2>
+                    <p style={{ color: '#555', fontSize: '0.9rem' }}>
+                        {studentInfo.grade}학년 {studentInfo.class}반 {studentInfo.number}번 {studentInfo.name}
+                    </p>
+                    <p style={{ fontSize: '0.85rem', color: '#777', margin: '0.25rem 0 1rem' }}>
+                        선생님께 받은 4자리 코드를 입력하세요.
+                    </p>
+                    <form onSubmit={handleVerifyCode} className="input-group">
+                        <input
+                            type="text"
+                            placeholder="4자리 코드"
+                            maxLength={4}
+                            value={codeInput}
+                            onChange={e => setCodeInput(e.target.value.replace(/\D/g, ''))}
+                            style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                            autoFocus
+                        />
+                        {codeError && <p style={{ color: 'red', fontSize: '0.85rem', margin: 0 }}>{codeError}</p>}
+                        {newCodeNotice && (
+                            <div style={{ background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '8px', padding: '0.75rem', textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', color: '#2e7d32' }}>발급된 코드를 선생님께 확인하세요.</p>
+                                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', letterSpacing: '0.5rem', color: '#1b5e20' }}>{newCodeNotice}</p>
+                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#555' }}>이 코드를 위 입력란에 입력하세요.</p>
+                            </div>
+                        )}
+                        <button type="submit" className="btn-primary w-full">확인</button>
+                    </form>
+                    <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+                        <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '0.5rem' }}>코드를 받지 못했나요?</p>
+                        <button className="btn-text" onClick={handleIssueCode}>코드 발급 요청</button>
+                    </div>
+                    <button className="btn-text" style={{ marginTop: '0.75rem', display: 'block', width: '100%' }} onClick={() => setStep('login')}>← 뒤로</button>
+                </div>
+            </div>
+        );
+    }
+
+    // ── 3단계: 포털 메인 ────────────────────────────────────────────
     return (
         <div className="student-portal fade-in">
             <header className="portal-header">
                 <h3>반갑습니다, {studentInfo.grade}학년 {studentInfo.class}반 {studentInfo.name} 학생</h3>
-                <button className="btn-text" onClick={() => { setIsLoggedIn(false); setScoreCodeVerified(false); setMyScores([]); }}>정보 수정</button>
+                <button className="btn-text" onClick={resetAll}>정보 수정</button>
             </header>
 
             {submitMsg && (
@@ -228,27 +316,12 @@ const StudentPortal = () => {
                 </div>
             )}
 
-            {/* 내 점수 조회 (코드 인증 필요) */}
-            <div className="glass-card" style={{ margin: '0.5rem 0', padding: '1rem' }}>
-                <h4 style={{ margin: '0 0 0.75rem' }}>내 점수 조회</h4>
-                {!scoreCodeVerified ? (
-                    <form onSubmit={handleVerifyScoreCode} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                        <div style={{ flex: 1, minWidth: '160px' }}>
-                            <input
-                                type="text"
-                                placeholder="선생님께 받은 4자리 코드"
-                                maxLength={4}
-                                value={scoreCodeInput}
-                                onChange={e => setScoreCodeInput(e.target.value.replace(/\D/g, ''))}
-                                style={{ width: '100%', padding: '0.4rem 0.6rem', boxSizing: 'border-box' }}
-                            />
-                            {scoreCodeError && <p style={{ color: 'red', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{scoreCodeError}</p>}
-                        </div>
-                        <button type="submit" className="btn-primary" style={{ whiteSpace: 'nowrap' }}>코드 확인</button>
-                    </form>
-                ) : (
-                    myScores.length === 0 ? (
-                        <p style={{ color: '#888', fontSize: '0.9rem' }}>공개된 점수가 없습니다.</p>
+            {/* 내 점수 */}
+            {scoresLoaded && (
+                <div className="glass-card" style={{ margin: '0.5rem 0', padding: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem' }}>내 점수</h4>
+                    {myScores.length === 0 ? (
+                        <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>공개된 점수가 없습니다.</p>
                     ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                             <thead>
@@ -266,9 +339,9 @@ const StudentPortal = () => {
                                 ))}
                             </tbody>
                         </table>
-                    )
-                )}
-            </div>
+                    )}
+                </div>
+            )}
 
             <div className="portal-content">
                 <section className="assessment-grid">
@@ -294,14 +367,13 @@ const StudentPortal = () => {
                                                 {item.Type}
                                             </span>
                                         )}
-                                        {isSubmitted && !isPast && (
+                                        {isSubmitted && (
                                             <span style={{ fontSize: '0.75rem', background: '#e6f4ea', color: '#188038', borderRadius: '4px', padding: '2px 6px' }}>
                                                 제출 완료
                                             </span>
                                         )}
                                     </div>
 
-                                    {/* 서답형/주관식: 제목 옆에 문제 표시 */}
                                     {(item.Type === '주관식 퀴즈' || item.Type === '서답형') && questions.length > 0 && (
                                         <div style={{ margin: '0.5rem 0', padding: '0.5rem 0.75rem', background: '#f8f9fa', borderRadius: '6px', fontSize: '0.85rem' }}>
                                             {questions.map((q, qi) => (

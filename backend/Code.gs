@@ -23,6 +23,7 @@ function doGet(e) {
     if (action === 'getMyScores')       return handleGetMyScores(p);
     if (action === 'getMySubmissions')  return handleGetMySubmissions(p);
     if (action === 'verifyStudentCode') return handleVerifyStudentCode(p);
+    if (action === 'issueStudentCode')  return handleIssueStudentCode(p);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
@@ -63,6 +64,15 @@ function getOrCreateStudentCode(grade, cls, number, name) {
   var code = String(Math.floor(1000 + Math.random() * 9000));
   sheet.appendRow([grade, cls, number, name, code]);
   return code;
+}
+
+function handleIssueStudentCode(p) {
+  if (!isValidGrade(p.grade))   return createResponse({ status: 'error', message: 'Invalid grade' });
+  if (!isValidClass(p.class))   return createResponse({ status: 'error', message: 'Invalid class' });
+  if (!isValidNumber(p.number)) return createResponse({ status: 'error', message: 'Invalid number' });
+  if (!isValidName(p.name))     return createResponse({ status: 'error', message: 'Invalid name' });
+  var code = getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
+  return createResponse({ status: 'success', code: code });
 }
 
 function handleVerifyStudentCode(p) {
@@ -138,6 +148,13 @@ function handleSubmit(p) {
   if (!isValidNumber(p.number))     return createResponse({ status: 'error', message: 'Invalid number' });
   if (!isValidName(p.name))         return createResponse({ status: 'error', message: 'Invalid name' });
   if (!isValidUuid(p.assessmentID)) return createResponse({ status: 'error', message: 'Invalid assessmentID' });
+
+  // 학생 코드 검증 (코드가 있는 경우만 - 기존 학생은 코드 없이도 첫 제출 가능)
+  if (p.code) {
+    if (!isValidCode(p.code)) return createResponse({ status: 'error', message: 'Invalid code' });
+    var realCode = getOrCreateStudentCode(p.grade, p.class, p.number, p.name);
+    if (p.code !== realCode) return createResponse({ status: 'error', message: '본인 확인 코드가 올바르지 않습니다.' });
+  }
 
   var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
@@ -246,16 +263,22 @@ function handleUpdateScore(p) {
 
   var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   var sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) return createResponse({ status: 'error', message: 'No data sheet' });
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEET_NAME);
+    sheet.appendRow(['Timestamp','Grade','Class','Number','Name','AssessmentID','Content','FileURL','Score','IsScorePublic']);
+  }
   var rows = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][1] == p.grade && rows[i][2] == p.class &&
         rows[i][3] == p.number && rows[i][5] == p.assessmentID) {
-      sheet.getRange(i + 1, 9).setValue(p.score);
+      sheet.getRange(i + 1, 9).setValue(Number(p.score));
       return createResponse({ status: 'success' });
     }
   }
-  return createResponse({ status: 'error', message: 'Submission not found' });
+  // 제출 기록 없으면 행 생성 후 점수 입력 (만점 일괄 부여 시)
+  var name = p.name || '';
+  sheet.appendRow([new Date(), p.grade, p.class, p.number, name, p.assessmentID, '', '', Number(p.score), false]);
+  return createResponse({ status: 'success' });
 }
 
 function handleCreateAssessment(p) {
