@@ -90,6 +90,8 @@ function handleSubmit(p) {
   // 마감 여부 + 평가 유형 확인
   var assessmentType = '서답형';
   var assessmentQuestions = '[]';
+  var assessmentTitle = '';
+  var assessmentGrade = '';
   var assessmentSheet = ss.getSheetByName(CONFIG.ASSESSMENT_SHEET);
   if (assessmentSheet) {
     var aRows = assessmentSheet.getDataRange().getValues();
@@ -98,6 +100,8 @@ function handleSubmit(p) {
     var idCol = aHeaders.indexOf('ID');
     var typeCol = aHeaders.indexOf('Type');
     var questionsCol = aHeaders.indexOf('Questions');
+    var titleCol = aHeaders.indexOf('Title');
+    var gradesCol = aHeaders.indexOf('Grades');
     for (var i = 1; i < aRows.length; i++) {
       if (aRows[i][idCol] == p.assessmentID) {
         if (deadlineCol >= 0) {
@@ -107,6 +111,8 @@ function handleSubmit(p) {
         }
         if (typeCol >= 0)      assessmentType = aRows[i][typeCol] || '서답형';
         if (questionsCol >= 0) assessmentQuestions = aRows[i][questionsCol] || '[]';
+        if (titleCol >= 0)     assessmentTitle = aRows[i][titleCol] || '';
+        if (gradesCol >= 0)    assessmentGrade = aRows[i][gradesCol] || '';
         break;
       }
     }
@@ -117,7 +123,9 @@ function handleSubmit(p) {
   if (assessmentType === '파일 업로드' && p.fileData && p.fileName && p.mimeType) {
     try {
       var folder = getOrCreateFolder('Performance_Assessments');
-      var subFolder = getOrCreateFolder(p.assessmentID, folder);
+      // 폴더명: 학년_평가제목
+      var subFolderName = assessmentGrade + '학년_' + (assessmentTitle || p.assessmentID);
+      var subFolder = getOrCreateFolder(subFolderName, folder);
       var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
       var file = subFolder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);

@@ -198,10 +198,11 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
 };
 
 // ── 채점 행 ─────────────────────────────────────────────────────────
-const ScoreRow = ({ submission: s, onSave, onToggleScorePublic, assessmentType }) => {
+const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) => {
     const [score, setScore] = useState(s.Score || '');
     return (
         <tr>
+            <td><input type="checkbox" checked={checked} onChange={e => onCheck(e.target.checked)} /></td>
             <td>{s.Grade}</td>
             <td>{s.Class}</td>
             <td>{s.Number}</td>
@@ -215,13 +216,8 @@ const ScoreRow = ({ submission: s, onSave, onToggleScorePublic, assessmentType }
                 <input type="number" value={score} onChange={e => setScore(e.target.value)} className="score-input" />
             </td>
             <td><button onClick={() => onSave(s, score)} className="save-btn">저장</button></td>
-            <td>
-                <button
-                    onClick={() => onToggleScorePublic(s, !s.IsScorePublic)}
-                    style={{ background: s.IsScorePublic ? '#e57373' : '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}
-                >
-                    {s.IsScorePublic ? '비공개' : '공개'}
-                </button>
+            <td style={{ textAlign: 'center', color: s.IsScorePublic ? '#4caf50' : '#aaa', fontSize: '0.8rem' }}>
+                {s.IsScorePublic ? '공개' : '비공개'}
             </td>
         </tr>
     );
@@ -238,6 +234,7 @@ const TeacherDashboard = () => {
     });
     const [submissions, setSubmissions] = useState([]);
     const [selectedAssessment, setSelectedAssessment] = useState(null);
+    const [checkedRows, setCheckedRows] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -285,7 +282,7 @@ const TeacherDashboard = () => {
     };
 
     const fetchSubmissions = async (assessment) => {
-        setSelectedAssessment(assessment); setSubmissions([]);
+        setSelectedAssessment(assessment); setSubmissions([]); setCheckedRows({});
         setIsLoading(true); setError('');
         try {
             const res = await fetch(`${GAS_URL}?action=getSubmissions`);
@@ -337,17 +334,17 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
-    const handleToggleScorePublic = async (submission, isPublic) => {
+    const handleBulkScorePublic = async (isPublic) => {
+        const targets = submissions.filter((_, i) => checkedRows[i]);
+        if (targets.length === 0) return;
         try {
-            const params = new URLSearchParams({ action: 'toggleScorePublic', grade: submission.Grade, class: submission.Class, number: submission.Number, assessmentID: submission.AssessmentID, isPublic: String(isPublic) });
-            const res = await fetch(`${GAS_URL}?${params}`);
-            const data = await res.json();
-            if (data.status === 'success')
-                setSubmissions(prev => prev.map(s =>
-                    s.Number === submission.Number && s.AssessmentID === submission.AssessmentID
-                        ? { ...s, IsScorePublic: isPublic } : s));
-            else setError('점수 공개 설정에 실패했습니다.');
-        } catch { setError('서버 연결에 실패했습니다.'); }
+            await Promise.all(targets.map(s => {
+                const params = new URLSearchParams({ action: 'toggleScorePublic', grade: s.Grade, class: s.Class, number: s.Number, assessmentID: s.AssessmentID, isPublic: String(isPublic) });
+                return fetch(`${GAS_URL}?${params}`);
+            }));
+            setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, IsScorePublic: isPublic } : s));
+            setCheckedRows({});
+        } catch { setError('점수 공개 설정에 실패했습니다.'); }
     };
 
     const handleDownloadCSV = async () => {
@@ -561,10 +558,32 @@ const TeacherDashboard = () => {
                     {isLoading ? <p className="empty-msg">불러오는 중...</p>
                         : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
                             : (
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                                        <input type="checkbox"
+                                            checked={submissions.length > 0 && submissions.every((_, i) => checkedRows[i])}
+                                            onChange={e => {
+                                                const next = {};
+                                                if (e.target.checked) submissions.forEach((_, i) => { next[i] = true; });
+                                                setCheckedRows(next);
+                                            }} />
+                                        전체선택
+                                    </label>
+                                    <button onClick={() => handleBulkScorePublic(true)}
+                                        style={{ background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        선택 공개
+                                    </button>
+                                    <button onClick={() => handleBulkScorePublic(false)}
+                                        style={{ background: '#e57373', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        선택 비공개
+                                    </button>
+                                    <span style={{ fontSize: '0.8rem', color: '#888' }}>{Object.values(checkedRows).filter(Boolean).length}명 선택됨</span>
+                                </div>
                                 <div className="table-container">
                                     <table className="grading-table">
                                         <thead>
                                             <tr>
+                                                <th></th>
                                                 <th>학년</th>
                                                 <th>반</th>
                                                 <th>번호</th>
@@ -572,12 +591,13 @@ const TeacherDashboard = () => {
                                                 <th className="content-col">내용/파일</th>
                                                 <th>점수</th>
                                                 <th>저장</th>
-                                                <th>점수공개</th>
+                                                <th>공개여부</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {submissions.map((s, i) => (
-                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} onToggleScorePublic={handleToggleScorePublic} assessmentType={selectedAssessment.Type} />
+                                                <ScoreRow key={i} submission={s} onSave={handleUpdateScore} assessmentType={selectedAssessment.Type}
+                                                    checked={!!checkedRows[i]} onCheck={v => setCheckedRows(prev => ({ ...prev, [i]: v }))} />
                                             ))}
                                         </tbody>
                                     </table>
