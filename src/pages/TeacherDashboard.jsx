@@ -379,7 +379,10 @@ const TeacherDashboard = () => {
             if (failed.length > 0) {
                 setError(`일부 실패: ${failed[0].message || '알 수 없는 오류'}`);
             } else {
-                setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, Score: score } : s));
+                const targetKeys = new Set(targets.map(s => `${s.Grade}-${s.Class}-${s.Number}`));
+                setSubmissions(prev => prev.map(s =>
+                    targetKeys.has(`${s.Grade}-${s.Class}-${s.Number}`) ? { ...s, Score: score } : s
+                ));
                 setCheckedRows({});
             }
         } catch (e) { setError('만점 부여에 실패했습니다: ' + e.message); }
@@ -393,7 +396,10 @@ const TeacherDashboard = () => {
                 const params = new URLSearchParams({ action: 'toggleScorePublic', grade: s.Grade, class: s.Class, number: s.Number, assessmentID: s.AssessmentID, isPublic: String(isPublic) });
                 return fetch(`${GAS_URL}?${params}`);
             }));
-            setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, IsScorePublic: isPublic } : s));
+            const targetKeys = new Set(targets.map(s => `${s.Grade}-${s.Class}-${s.Number}`));
+            setSubmissions(prev => prev.map(s =>
+                targetKeys.has(`${s.Grade}-${s.Class}-${s.Number}`) ? { ...s, IsScorePublic: isPublic } : s
+            ));
             setCheckedRows({});
         } catch { setError('점수 공개 설정에 실패했습니다.'); }
     };
