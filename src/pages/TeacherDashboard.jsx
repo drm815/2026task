@@ -362,25 +362,23 @@ const TeacherDashboard = () => {
         const targets = submissions.filter((_, i) => checkedRows[i]);
         if (targets.length === 0) { setError('학생을 선택해주세요.'); return; }
         setError('');
-        // UI 먼저 즉시 업데이트
-        const targetKeys = new Set(targets.map(s => `${s.Grade}-${s.Class}-${s.Number}`));
-        setSubmissions(prev => prev.map(s =>
-            targetKeys.has(`${s.Grade}-${s.Class}-${s.Number}`) ? { ...s, Score: score } : s
-        ));
         setCheckedRows({});
-        // GAS에 저장 (백그라운드)
-        targets.forEach(s => {
-            const params = new URLSearchParams({
-                action: 'updateScore',
-                grade: String(Math.round(Number(s.Grade))),
-                class: String(Math.round(Number(s.Class))),
-                number: String(Math.round(Number(s.Number))),
-                name: s.Name,
-                assessmentID: s.AssessmentID,
-                score: String(Number(score)),
-            });
-            fetch(`${GAS_URL}?${params}`).catch(() => {});
-        });
+        try {
+            await Promise.all(targets.map(s => {
+                const params = new URLSearchParams({
+                    action: 'updateScore',
+                    grade: String(Math.round(Number(s.Grade))),
+                    class: String(Math.round(Number(s.Class))),
+                    number: String(Math.round(Number(s.Number))),
+                    name: String(s.Name),
+                    assessmentID: String(s.AssessmentID),
+                    score: String(Number(score)),
+                });
+                return fetch(`${GAS_URL}?${params}`);
+            }));
+        } catch {}
+        // 저장 후 서버에서 최신 데이터 다시 로드
+        await fetchSubmissions(selectedAssessment);
     };
 
     const handleBulkScorePublic = async (isPublic) => {
