@@ -11,22 +11,58 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      // GAS POST → 302 리다이렉트 → 최종 URL을 GET으로 요청해야 응답 받음
-      // req.body가 이미 파싱된 객체일 수 있으므로 stringify
-      const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-      const gasRes = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: bodyStr,
-        redirect: 'manual',
-      });
-      const finalUrl = gasRes.headers.get('location');
-      if (!finalUrl) {
-        const text = await gasRes.text();
-        try { res.status(200).json(JSON.parse(text)); }
-        catch { res.status(200).json({ status: 'error', message: text }); }
-        return;
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+      // 이미지 업로드: Vercel 자체 저장소(메모리 캐시)에 저장 후 키 반환
+      // GAS GET 파라미터로 짧은 키만 전달, 학생이 볼 때 Vercel에서 이미지 제공
+      if (body.action === 'uploadRefMaterial') {
+        if (!body.fileData || !body.mimeType) {
+          return res.status(200).json({ status: 'error', message: 'Missing file data' });
+        }
+        // GAS의 uploadRefMaterial에 청크 저장 방식으로 전달
+        // 청크를 여러 개의 GAS GET 호출로 나눠 저장
+        const chunkSize = 1500; // URL 안전 크기
+        const data = body.fileData;
+        const chunks = [];
+        for (let i = 0; i < data.length; i += chunkSize) {
+          chunks.push(data.substring(i, i + chunkSize));
+        }
+        // 첫 청크로 imgId 생성
+        const initParams = new URLSearchParams({
+          action: 'uploadRefMaterial',
+          mimeType: body.mimeType,
+          fileName: body.fileName || 'image.jpg',
+          totalChunks: chunks.length,
+          chunkIndex: 0,
+          fileData: chunks[0],
+        });
+        const initRes = await fetch(`${GAS_URL}?${initParams}`, { redirect: 'follow' });
+        const initData = await initRes.json();
+        if (initData.status !== 'success') {
+          return res.status(200).json(initData);
+        }
+        const imgId = initData.imgId;
+        // 나머지 청크 순차 전송
+        for (let i = 1; i < chunks.length; i++) {
+          const chunkParams = new URLSearchParams({
+            action: 'appendRefChunk',
+            imgId,
+            chunkIndex: i,
+            fileData: chunks[i],
+          });
+          await fetch(`${GAS_URL}?${chunkParams}`, { redirect: 'follow' });
+        }
+        return res.status(200).json({ status: 'success', url: `refimg://${imgId}` });
       }
+
+      // submitAssignment: query string으로 GAS doGet에 전달
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(body)) {
+        params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      }
+      const url = `${GAS_URL}?${params}`;
+      const gasRes = await fetch(url, { redirect: 'manual' });
+      const finalUrl = gasRes.headers.get('location') || url;
       const finalRes = await fetch(finalUrl);
       const text = await finalRes.text();
       try {
