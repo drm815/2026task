@@ -3,6 +3,25 @@ import './StudentPortal.css';
 
 const GAS_URL = '/api/gas';
 
+// refimg:// URL을 GAS에서 가져와 표시하는 컴포넌트
+const RefImage = ({ url }) => {
+    const [src, setSrc] = useState('');
+    useEffect(() => {
+        if (!url) return;
+        if (url.startsWith('refimg://')) {
+            const imgId = url.replace('refimg://', '');
+            fetch(`${GAS_URL}?action=getRefImage&imgId=${imgId}`)
+                .then(r => r.json())
+                .then(d => { if (d.status === 'success') setSrc(d.dataUrl); })
+                .catch(() => {});
+        } else {
+            setSrc(url);
+        }
+    }, [url]);
+    if (!src) return <p style={{ fontSize: '0.8rem', color: '#aaa' }}>이미지 로딩 중...</p>;
+    return <img src={src} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />;
+};
+
 // ── 객관식 제출 UI ───────────────────────────────────────────────────
 const MultipleChoiceSubmit = ({ questions, answers, onChange }) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -412,7 +431,7 @@ const StudentPortal = () => {
                                                         <p style={{ fontSize: '0.9rem', color: '#333', margin: '0 0 0.5rem', whiteSpace: 'pre-wrap' }}>{item.RefText}</p>
                                                     )}
                                                     {item.RefImageUrl && (
-                                                        <img src={item.RefImageUrl} alt="참고 이미지" style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                                        <RefImage url={item.RefImageUrl} />
                                                     )}
                                                 </div>
                                             )}

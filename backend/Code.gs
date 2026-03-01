@@ -2,6 +2,7 @@ const CONFIG = {
   SHEET_NAME: 'Data',
   ASSESSMENT_SHEET: 'Assessments',
   STUDENT_CODE_SHEET: 'StudentCodes',
+  REF_IMAGE_SHEET: 'RefImages',
   SPREADSHEET_ID: '17Sh0JAetBrjMV0-QAzhv0X31HYYgYzDFRTXMzb2fJVg'
 };
 
@@ -25,6 +26,7 @@ function doGet(e) {
     if (action === 'verifyStudentCode') return handleVerifyStudentCode(p);
     if (action === 'issueStudentCode')  return handleIssueStudentCode(p);
     if (action === 'uploadRefMaterial') return handleUploadRefMaterial(p);
+    if (action === 'getRefImage')       return handleGetRefImage(p);
     return createResponse({ status: 'error', message: 'Unknown action' });
   } catch (err) {
     return createResponse({ status: 'error', message: err.toString() });
@@ -473,14 +475,55 @@ function handleUploadRefMaterial(p) {
   if (!p.fileData || !p.fileName || !p.mimeType)
     return createResponse({ status: 'error', message: 'Missing file data' });
   try {
-    // Drive에 백업 저장
-    var folder = getOrCreateFolder('Performance_Assessments');
-    var refFolder = getOrCreateFolder('RefMaterials', folder);
-    var blob = Utilities.newBlob(Utilities.base64Decode(p.fileData), p.mimeType, p.fileName);
-    refFolder.createFile(blob);
-    // data URL로 반환 - img 태그에서 직접 사용 (Drive URL 차단 문제 회피)
-    var dataUrl = 'data:' + p.mimeType + ';base64,' + p.fileData;
-    return createResponse({ status: 'success', url: dataUrl });
+    // RefImages 시트에 base64 저장 (셀 50000자 한도 회피 위해 별도 시트 사용)
+    var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var imgSheet = ss.getSheetByName(CONFIG.REF_IMAGE_SHEET);
+    if (!imgSheet) {
+      imgSheet = ss.insertSheet(CONFIG.REF_IMAGE_SHEET);
+      imgSheet.appendRow(['ID', 'MimeType', 'Data']);
+    }
+    var imgId = Utilities.getUuid();
+    // 큰 데이터는 여러 행에 나눠 저장 (각 셀 최대 45000자)
+    var CHUNK = 45000;
+    var data = p.fileData;
+    var chunks = [];
+    for (var i = 0; i < data.length; i += CHUNK) {
+      chunks.push(data.substring(i, i + CHUNK));
+    }
+    // 첫 행: ID, MimeType, 청크수, 청크1
+    imgSheet.appendRow([imgId, p.mimeType, chunks.length, chunks[0] || '']);
+    // 나머지 청크는 같은 행의 E열부터 추가
+    var lastRow = imgSheet.getLastRow();
+    for (var j = 1; j < chunks.length; j++) {
+      imgSheet.getRange(lastRow, 4 + j).setValue(chunks[j]);
+    }
+    // URL은 이미지 ID 참조 형태로 저장
+    var imageUrl = 'refimg://' + imgId;
+    return createResponse({ status: 'success', url: imageUrl });
+  } catch(err) {
+    return createResponse({ status: 'error', message: err.toString() });
+  }
+}
+
+function handleGetRefImage(p) {
+  if (!p.imgId) return createResponse({ status: 'error', message: 'Missing imgId' });
+  try {
+    var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var imgSheet = ss.getSheetByName(CONFIG.REF_IMAGE_SHEET);
+    if (!imgSheet) return createResponse({ status: 'error', message: 'No image sheet' });
+    var rows = imgSheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][0] == p.imgId) {
+        var mimeType = rows[i][1];
+        var chunkCount = Number(rows[i][2]);
+        var data = '';
+        for (var j = 0; j < chunkCount; j++) {
+          data += rows[i][3 + j] || '';
+        }
+        return createResponse({ status: 'success', dataUrl: 'data:' + mimeType + ';base64,' + data });
+      }
+    }
+    return createResponse({ status: 'error', message: 'Image not found' });
   } catch(err) {
     return createResponse({ status: 'error', message: err.toString() });
   }

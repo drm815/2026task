@@ -2,6 +2,25 @@ import { useState, useEffect } from 'react';
 import './TeacherDashboard.css';
 
 const GAS_URL = '/api/gas';
+
+// refimg:// URL을 GAS에서 가져와 표시하는 컴포넌트
+const RefImage = ({ url, style }) => {
+    const [src, setSrc] = useState('');
+    useEffect(() => {
+        if (!url) return;
+        if (url.startsWith('refimg://')) {
+            const imgId = url.replace('refimg://', '');
+            fetch(`${GAS_URL}?action=getRefImage&imgId=${imgId}`)
+                .then(r => r.json())
+                .then(d => { if (d.status === 'success') setSrc(d.dataUrl); })
+                .catch(() => {});
+        } else {
+            setSrc(url);
+        }
+    }, [url]);
+    if (!src) return null;
+    return <img src={src} alt="참고 이미지" style={style} />;
+};
 const GRADES = [1, 2, 3];
 const TYPES = ['서답형', '객관식', '주관식 퀴즈', '파일 업로드'];
 
@@ -197,7 +216,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                     <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
                     {editForm.refImageUrl && (
                         <div style={{ position: 'relative', display: 'inline-block' }}>
-                            <img src={editForm.refImageUrl} alt="참고 이미지" style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                            <RefImage url={editForm.refImageUrl} style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
                             <button
                                 onClick={() => setEditForm({ ...editForm, refImageUrl: '' })}
                                 style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
@@ -659,7 +678,7 @@ const TeacherDashboard = () => {
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
                         {newAssessment.refImageUrl && (
                             <div style={{ position: 'relative', display: 'inline-block' }}>
-                                <img src={newAssessment.refImageUrl} alt="참고 이미지" style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                <RefImage url={newAssessment.refImageUrl} style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
                                 <button
                                     onClick={() => setNewAssessment({ ...newAssessment, refImageUrl: '' })}
                                     style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
