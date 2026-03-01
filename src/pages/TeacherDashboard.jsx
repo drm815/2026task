@@ -360,14 +360,29 @@ const TeacherDashboard = () => {
     const handleBulkSetScore = async (score) => {
         const targets = submissions.filter((_, i) => checkedRows[i]);
         if (targets.length === 0) { setError('학생을 선택해주세요.'); return; }
+        setError('');
         try {
-            await Promise.all(targets.map(s => {
-                const params = new URLSearchParams({ action: 'updateScore', grade: s.Grade, class: s.Class, number: s.Number, name: s.Name, assessmentID: s.AssessmentID, score: String(score) });
-                return fetch(`${GAS_URL}?${params}`);
+            const results = await Promise.all(targets.map(async s => {
+                const params = new URLSearchParams({
+                    action: 'updateScore',
+                    grade: String(Math.round(Number(s.Grade))),
+                    class: String(Math.round(Number(s.Class))),
+                    number: String(Math.round(Number(s.Number))),
+                    name: s.Name,
+                    assessmentID: s.AssessmentID,
+                    score: String(Number(score)),
+                });
+                const res = await fetch(`${GAS_URL}?${params}`);
+                return res.json();
             }));
-            setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, Score: score } : s));
-            setCheckedRows({});
-        } catch { setError('만점 부여에 실패했습니다.'); }
+            const failed = results.filter(r => r.status !== 'success');
+            if (failed.length > 0) {
+                setError(`일부 실패: ${failed[0].message || '알 수 없는 오류'}`);
+            } else {
+                setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, Score: score } : s));
+                setCheckedRows({});
+            }
+        } catch (e) { setError('만점 부여에 실패했습니다: ' + e.message); }
     };
 
     const handleBulkScorePublic = async (isPublic) => {
