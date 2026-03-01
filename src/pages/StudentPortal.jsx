@@ -442,8 +442,15 @@ const StudentPortal = () => {
                                             {item.Type === '객관식' && questions.length > 0 && (
                                                 <MultipleChoiceSubmit questions={questions} answers={answers} onChange={setAnswers} />
                                             )}
-                                            {(item.Type === '주관식 퀴즈' || item.Type === '서답형') && questions.length > 0 && (
-                                                <ShortAnswerSubmit questions={questions} answers={answers} onChange={setAnswers} />
+                                            {(item.Type === '주관식 퀴즈' || item.Type === '서답형') && (
+                                                questions.length > 0
+                                                    ? <ShortAnswerSubmit questions={questions} answers={answers} onChange={setAnswers} />
+                                                    : <textarea
+                                                        placeholder="답을 입력하세요"
+                                                        value={answers[0] || ''}
+                                                        onChange={e => setAnswers({ ...answers, 0: e.target.value })}
+                                                        style={{ width: '100%', minHeight: '120px', padding: '0.5rem', boxSizing: 'border-box' }}
+                                                    />
                                             )}
                                             {item.Type === '파일 업로드' && (
                                                 <div>
