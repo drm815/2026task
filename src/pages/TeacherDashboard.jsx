@@ -230,7 +230,7 @@ const TeacherDashboard = () => {
     const [authError, setAuthError] = useState('');
     const [assessments, setAssessments] = useState([]);
     const [newAssessment, setNewAssessment] = useState({
-        title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: []
+        title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: ''
     });
     const [submissions, setSubmissions] = useState([]);
     const [selectedAssessment, setSelectedAssessment] = useState(null);
@@ -334,6 +334,19 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
+    const handleBulkSetScore = async (score) => {
+        const targets = submissions.filter((_, i) => checkedRows[i]);
+        if (targets.length === 0) return;
+        try {
+            await Promise.all(targets.map(s => {
+                const params = new URLSearchParams({ action: 'updateScore', grade: s.Grade, class: s.Class, number: s.Number, assessmentID: s.AssessmentID, score });
+                return fetch(`${GAS_URL}?${params}`);
+            }));
+            setSubmissions(prev => prev.map((s, i) => checkedRows[i] ? { ...s, Score: score } : s));
+            setCheckedRows({});
+        } catch { setError('만점 부여에 실패했습니다.'); }
+    };
+
     const handleBulkScorePublic = async (isPublic) => {
         const targets = submissions.filter((_, i) => checkedRows[i]);
         if (targets.length === 0) return;
@@ -417,11 +430,12 @@ const TeacherDashboard = () => {
                 grades: newAssessment.grades.join(','),
                 type: newAssessment.type,
                 questions: JSON.stringify(newAssessment.questions),
+                maxScore: newAssessment.maxScore,
             });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
-                setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [] });
+                setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '' });
                 await fetchAssessments();
             } else setError('등록에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
@@ -492,6 +506,9 @@ const TeacherDashboard = () => {
                             <p style={{ fontSize: '0.85rem', color: '#888' }}>학생이 파일을 업로드합니다. 파일명은 학년-반-번호-이름으로 자동 저장됩니다.</p>
                         )}
 
+                        <label style={{ fontSize: '0.85rem', color: '#666' }}>만점 (선택)</label>
+                        <input type="number" placeholder="예: 100" min="1" value={newAssessment.maxScore}
+                            onChange={e => setNewAssessment({ ...newAssessment, maxScore: e.target.value })} />
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>제출 기한</label>
                         <input type="datetime-local" value={newAssessment.deadline}
                             onChange={e => setNewAssessment({ ...newAssessment, deadline: e.target.value })} />
@@ -558,7 +575,7 @@ const TeacherDashboard = () => {
                     {isLoading ? <p className="empty-msg">불러오는 중...</p>
                         : submissions.length === 0 ? <p className="empty-msg">제출된 내용이 없습니다.</p>
                             : (
-                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', cursor: 'pointer' }}>
                                         <input type="checkbox"
                                             checked={submissions.length > 0 && submissions.every((_, i) => checkedRows[i])}
@@ -569,6 +586,12 @@ const TeacherDashboard = () => {
                                             }} />
                                         전체선택
                                     </label>
+                                    {selectedAssessment.MaxScore && (
+                                        <button onClick={() => handleBulkSetScore(selectedAssessment.MaxScore)}
+                                            style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            선택 만점({selectedAssessment.MaxScore}점) 부여
+                                        </button>
+                                    )}
                                     <button onClick={() => handleBulkScorePublic(true)}
                                         style={{ background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                                         선택 공개

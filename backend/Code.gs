@@ -36,7 +36,8 @@ function isValidNumber(v)   { return Number.isInteger(Number(v)) && Number(v) >=
 function isValidName(v)     { return typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 10; }
 function isValidText(v, max){ return typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= max; }
 function isValidUuid(v)     { return typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v); }
-function isValidScore(v)    { return v !== '' && v !== null && v !== undefined && Number(v) >= 0 && Number(v) <= 100; }
+function isValidScore(v)    { return v !== '' && v !== null && v !== undefined && Number(v) >= 0 && Number(v) <= 10000; }
+function isValidMaxScore(v) { return v === '' || v === undefined || v === null || (Number(v) >= 1 && Number(v) <= 10000); }
 function isValidDeadline(v) { return typeof v === 'string' && !isNaN(Date.parse(v)); }
 
 function handleGetAssessments() {
@@ -207,11 +208,11 @@ function handleCreateAssessment(p) {
   var sheet = ss.getSheetByName(CONFIG.ASSESSMENT_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.ASSESSMENT_SHEET);
-    sheet.appendRow(['ID','Title','Description','Criteria','IsPublic','CreatedAt','Deadline','Grades','Type','Questions']);
+    sheet.appendRow(['ID','Title','Description','Criteria','IsPublic','CreatedAt','Deadline','Grades','Type','Questions','MaxScore']);
   }
   var id = Utilities.getUuid();
   sheet.appendRow([id, p.title, p.description, p.criteria, false, new Date(), new Date(p.deadline),
-    p.grades || '', p.type || '서답형', p.questions || '[]']);
+    p.grades || '', p.type || '서답형', p.questions || '[]', p.maxScore || '']);
   return createResponse({ status: 'success', id: id });
 }
 
@@ -234,6 +235,7 @@ function handleUpdateAssessment(p) {
       if (p.grades !== undefined) sheet.getRange(i + 1, 8).setValue(p.grades);
       if (p.type)                 sheet.getRange(i + 1, 9).setValue(p.type);
       if (p.questions !== undefined) sheet.getRange(i + 1, 10).setValue(p.questions);
+      if (p.maxScore !== undefined)  sheet.getRange(i + 1, 11).setValue(p.maxScore);
       return createResponse({ status: 'success' });
     }
   }
