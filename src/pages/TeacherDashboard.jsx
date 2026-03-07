@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useMemo, useCallback, useTransition } from 'react';
 import './TeacherDashboard.css';
-
-const GAS_URL = '/api/gas';
+import { GAS_URL } from '../constants';
+import { cachedFetch, invalidateCache } from '../gasCache';
 
 // 참고 이미지 표시 컴포넌트 (refimg:// → GAS에서 data URL 조회)
 const RefImage = ({ url, style }) => {
@@ -188,41 +188,44 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
             {editingContent && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
                     <input type="text" placeholder="평가 제목" value={editForm.title}
-                        onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
+                        onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))} />
                     <textarea placeholder="상세 설명" value={editForm.description}
-                        onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+                        onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))} />
                     <textarea placeholder="평가 기준" value={editForm.criteria}
-                        onChange={e => setEditForm({ ...editForm, criteria: e.target.value })} />
+                        onChange={e => setEditForm(prev => ({ ...prev, criteria: e.target.value }))} />
                     <input type="datetime-local" value={editForm.deadline}
-                        onChange={e => setEditForm({ ...editForm, deadline: e.target.value })} />
+                        onChange={e => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} />
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {GRADES.map(g => (
                             <label key={g} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
                                 <input type="checkbox" checked={editForm.grades.includes(String(g))}
                                     onChange={e => {
-                                        const gs = e.target.checked
-                                            ? [...editForm.grades, String(g)]
-                                            : editForm.grades.filter(x => x !== String(g));
-                                        setEditForm({ ...editForm, grades: gs });
+                                        const checked = e.target.checked;
+                                        setEditForm(prev => ({
+                                            ...prev,
+                                            grades: checked
+                                                ? [...prev.grades, String(g)]
+                                                : prev.grades.filter(x => x !== String(g)),
+                                        }));
                                     }} />
                                 {g}학년
                             </label>
                         ))}
                     </div>
-                    <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value, questions: [] })}>
+                    <select value={editForm.type} onChange={e => setEditForm(prev => ({ ...prev, type: e.target.value, questions: [] }))}>
                         {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     {editForm.type === '객관식' && (
-                        <MultipleChoiceEditor questions={editForm.questions} onChange={qs => setEditForm({ ...editForm, questions: qs })} />
+                        <MultipleChoiceEditor questions={editForm.questions} onChange={qs => setEditForm(prev => ({ ...prev, questions: qs }))} />
                     )}
                     {(editForm.type === '주관식 퀴즈' || editForm.type === '서답형') && (
-                        <ShortAnswerEditor questions={editForm.questions} onChange={qs => setEditForm({ ...editForm, questions: qs })} type={editForm.type} />
+                        <ShortAnswerEditor questions={editForm.questions} onChange={qs => setEditForm(prev => ({ ...prev, questions: qs }))} type={editForm.type} />
                     )}
                     <label style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>예시문 (선택)</label>
                     <textarea
                         placeholder="학생에게 보여줄 예시문이나 안내글을 입력하세요"
                         value={editForm.refText}
-                        onChange={e => setEditForm({ ...editForm, refText: e.target.value })}
+                        onChange={e => setEditForm(prev => ({ ...prev, refText: e.target.value }))}
                         style={{ minHeight: '80px' }}
                     />
                     <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
@@ -230,7 +233,7 @@ const AssessmentItem = ({ item, onGrade, onUpdateDeadline, onUpdate, onDelete, o
                         <div style={{ position: 'relative', display: 'inline-block' }}>
                             <RefImage url={editForm.refImageUrl} style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
                             <button
-                                onClick={() => setEditForm({ ...editForm, refImageUrl: '' })}
+                                onClick={() => setEditForm(prev => ({ ...prev, refImageUrl: '' }))}
                                 style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
                             >×</button>
                         </div>
@@ -314,7 +317,7 @@ const extractAnswers = (content) => {
 };
 
 // ── 채점 행 (미리보기 포함) ──────────────────────────────────────────
-const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) => {
+const ScoreRow = memo(({ submission: s, onSave, assessmentType, checked, onCheck }) => {
     const [score, setScore] = useState(s.Score || '');
     const [expanded, setExpanded] = useState(false);
     useEffect(() => { setScore(s.Score || ''); }, [s.Score]);
@@ -360,7 +363,7 @@ const ScoreRow = ({ submission: s, onSave, assessmentType, checked, onCheck }) =
             )}
         </>
     );
-};
+});
 
 // ── 메인 대시보드 ────────────────────────────────────────────────────
 const TeacherDashboard = () => {
@@ -386,6 +389,8 @@ const TeacherDashboard = () => {
     const [historyStudent, setHistoryStudent] = useState(null);
     // 평가 정렬 순서
     const [sortOrder, setSortOrder] = useState('default'); // 'default' | 'deadline' | 'title'
+
+    const [, startTransition] = useTransition();
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -423,8 +428,7 @@ const TeacherDashboard = () => {
     const fetchAssessments = async () => {
         setIsLoading(true); setError('');
         try {
-            const res = await fetch(`${GAS_URL}?action=getAssessments`);
-            const data = await res.json();
+            const data = await cachedFetch(`${GAS_URL}?action=getAssessments`);
             setAssessments(Array.isArray(data) ? data : []);
         } catch { setError('평가 목록을 불러오지 못했습니다.'); }
         finally { setIsLoading(false); }
@@ -435,8 +439,7 @@ const TeacherDashboard = () => {
         setGradingTab('grading'); setHistoryStudent(null);
         setIsLoading(true); setError('');
         try {
-            const res = await fetch(`${GAS_URL}?action=getSubmissions`);
-            const data = await res.json();
+            const data = await cachedFetch(`${GAS_URL}?action=getSubmissions`);
             const all = Array.isArray(data) ? data : [];
             setAllSubmissions(all);
             setSubmissions(all.filter(s => s.AssessmentID === assessment.ID));
@@ -473,7 +476,7 @@ const TeacherDashboard = () => {
             const params = new URLSearchParams({ action: 'updateAssessment', id, ...form });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
-            if (data.status === 'success') await fetchAssessments();
+            if (data.status === 'success') { invalidateCache('getAssessments'); await fetchAssessments(); }
             else setError('수정에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
@@ -483,9 +486,10 @@ const TeacherDashboard = () => {
             const params = new URLSearchParams({ action: 'toggleVisibility', id, isPublic: String(isPublic) });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
-            if (data.status === 'success')
+            if (data.status === 'success') {
+                invalidateCache('getAssessments');
                 setAssessments(prev => prev.map(a => a.ID === id ? { ...a, IsPublic: isPublic } : a));
-            else setError('공개 설정 변경에 실패했습니다.');
+            } else setError('공개 설정 변경에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
     };
 
@@ -509,7 +513,7 @@ const TeacherDashboard = () => {
             });
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
-            if (data.status === 'success') await fetchAssessments();
+            if (data.status === 'success') { invalidateCache('getAssessments'); await fetchAssessments(); }
             else setError('복사에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
         finally { setIsLoading(false); }
@@ -534,6 +538,7 @@ const TeacherDashboard = () => {
                 return fetch(`${GAS_URL}?${params}`);
             }));
         } catch {}
+        invalidateCache('getSubmissions');
         await fetchSubmissions(selectedAssessment);
     };
 
@@ -600,6 +605,7 @@ const TeacherDashboard = () => {
             const res = await fetch(`${GAS_URL}?${params}`);
             const data = await res.json();
             if (data.status === 'success') {
+                invalidateCache('getAssessments');
                 setAssessments(prev => prev.filter(a => a.ID !== id));
                 if (selectedAssessment?.ID === id) { setSelectedAssessment(null); setSubmissions([]); }
             } else setError('삭제에 실패했습니다.');
@@ -666,15 +672,19 @@ const TeacherDashboard = () => {
             if (data.status === 'success') {
                 setNewAssessment({ title: '', description: '', criteria: '', deadline: '', grades: [], type: '서답형', questions: [], maxScore: '', refText: '', refImageUrl: '' });
                 setRefImageFile(null);
+                invalidateCache('getAssessments');
                 await fetchAssessments();
             } else setError('등록에 실패했습니다.');
         } catch { setError('서버 연결에 실패했습니다.'); }
         finally { setIsLoading(false); }
     };
 
+    // ── 평가 Map 인덱스 (O(1) 탐색) ────────────────────────────────
+    const assessmentMap = useMemo(() => new Map(assessments.map(a => [a.ID, a])), [assessments]);
+
     // ── 점수 통계 계산 ───────────────────────────────────────────────
-    const calcStats = (subs) => {
-        const scored = subs.filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined && !isNaN(Number(s.Score)));
+    const stats = useMemo(() => {
+        const scored = submissions.filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined && !isNaN(Number(s.Score)));
         if (scored.length === 0) return null;
         const nums = scored.map(s => Number(s.Score));
         const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
@@ -684,13 +694,12 @@ const TeacherDashboard = () => {
             max: Math.max(...nums),
             min: Math.min(...nums),
         };
-    };
+    }, [submissions]);
 
-    // ── 미제출 학생 계산 (제출자 목록 - 전체 학생 개념은 없으므로 학년별 기제출자 외 표시) ──
-    const getUnsubmitted = () => {
-        // 현재 평가 기제출자 key
+    // ── 미제출 학생 계산 ─────────────────────────────────────────────
+    const unsubmitted = useMemo(() => {
+        if (!selectedAssessment) return [];
         const submittedKeys = new Set(submissions.map(s => `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`));
-        // 다른 평가에서 확인된 전체 학생 (allSubmissions 기준)
         const allStudentKeys = new Set();
         const allStudents = {};
         allSubmissions.forEach(s => {
@@ -700,29 +709,25 @@ const TeacherDashboard = () => {
                 allStudents[key] = { Grade: s.Grade, Class: s.Class, Number: s.Number, Name: s.Name };
             }
         });
-        // 해당 평가 학년 필터
-        const aGrades = selectedAssessment?.Grades ? String(selectedAssessment.Grades).split(',').filter(Boolean) : [];
+        const aGrades = selectedAssessment.Grades ? String(selectedAssessment.Grades).split(',').filter(Boolean) : [];
         return Object.values(allStudents)
             .filter(st => {
                 if (aGrades.length > 0 && !aGrades.includes(String(st.Grade))) return false;
                 return !submittedKeys.has(`${st.Grade}-${st.Class}-${st.Number}-${st.Name}`);
             })
             .sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
-    };
+    }, [submissions, allSubmissions, selectedAssessment]);
 
     // ── 학생별 제출 이력 ─────────────────────────────────────────────
-    const getStudentHistory = (student) => {
-        if (!student) return [];
+    const studentHistory = useMemo(() => {
+        if (!historyStudent) return [];
         return allSubmissions
-            .filter(s => s.Grade == student.Grade && s.Class == student.Class && s.Number == student.Number && s.Name === student.Name)
-            .map(s => {
-                const assessment = assessments.find(a => a.ID === s.AssessmentID);
-                return { ...s, AssessmentTitle: assessment?.Title || '(삭제된 평가)' };
-            });
-    };
+            .filter(s => s.Grade == historyStudent.Grade && s.Class == historyStudent.Class && s.Number == historyStudent.Number && s.Name === historyStudent.Name)
+            .map(s => ({ ...s, AssessmentTitle: assessmentMap.get(s.AssessmentID)?.Title || '(삭제된 평가)' }));
+    }, [historyStudent, allSubmissions, assessmentMap]);
 
     // ── 평가 목록 정렬 ───────────────────────────────────────────────
-    const getSortedAssessments = (list) => {
+    const getSortedAssessments = useCallback((list) => {
         if (sortOrder === 'deadline') {
             return [...list].sort((a, b) => {
                 if (!a.Deadline) return 1;
@@ -734,14 +739,10 @@ const TeacherDashboard = () => {
             return [...list].sort((a, b) => String(a.Title).localeCompare(String(b.Title), 'ko'));
         }
         return list;
-    };
-
-    const stats = calcStats(submissions);
-    const unsubmitted = selectedAssessment ? getUnsubmitted() : [];
-    const studentHistory = getStudentHistory(historyStudent);
+    }, [sortOrder]);
 
     // 고유 학생 목록 (이력 조회용)
-    const uniqueStudents = (() => {
+    const uniqueStudents = useMemo(() => {
         const seen = new Set();
         return allSubmissions.filter(s => {
             const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
@@ -749,7 +750,7 @@ const TeacherDashboard = () => {
             seen.add(key);
             return true;
         }).sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
-    })();
+    }, [allSubmissions]);
 
     return (
         <div className="teacher-dashboard fade-in">
@@ -764,11 +765,11 @@ const TeacherDashboard = () => {
                     <h3>새 수행평가 등록</h3>
                     <div className="input-group">
                         <input type="text" placeholder="평가 제목" value={newAssessment.title}
-                            onChange={e => setNewAssessment({ ...newAssessment, title: e.target.value })} />
+                            onChange={e => setNewAssessment(prev => ({ ...prev, title: e.target.value }))} />
                         <textarea placeholder="상세 설명 (평가 안내)" value={newAssessment.description}
-                            onChange={e => setNewAssessment({ ...newAssessment, description: e.target.value })} />
+                            onChange={e => setNewAssessment(prev => ({ ...prev, description: e.target.value }))} />
                         <textarea placeholder="평가 기준 (학생 공개용)" value={newAssessment.criteria}
-                            onChange={e => setNewAssessment({ ...newAssessment, criteria: e.target.value })} />
+                            onChange={e => setNewAssessment(prev => ({ ...prev, criteria: e.target.value }))} />
 
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>공개 학년 (복수 선택 가능)</label>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -776,10 +777,13 @@ const TeacherDashboard = () => {
                                 <label key={g} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
                                     <input type="checkbox" checked={newAssessment.grades.includes(String(g))}
                                         onChange={e => {
-                                            const gs = e.target.checked
-                                                ? [...newAssessment.grades, String(g)]
-                                                : newAssessment.grades.filter(x => x !== String(g));
-                                            setNewAssessment({ ...newAssessment, grades: gs });
+                                            const checked = e.target.checked;
+                                            setNewAssessment(prev => ({
+                                                ...prev,
+                                                grades: checked
+                                                    ? [...prev.grades, String(g)]
+                                                    : prev.grades.filter(x => x !== String(g)),
+                                            }));
                                         }} />
                                     {g}학년
                                 </label>
@@ -788,7 +792,7 @@ const TeacherDashboard = () => {
 
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>평가 유형</label>
                         <select value={newAssessment.type}
-                            onChange={e => setNewAssessment({ ...newAssessment, type: e.target.value, questions: [] })}>
+                            onChange={e => setNewAssessment(prev => ({ ...prev, type: e.target.value, questions: [] }))}>
                             {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
 
@@ -797,7 +801,7 @@ const TeacherDashboard = () => {
                                 <label style={{ fontSize: '0.85rem', color: '#666' }}>객관식 문제 출제</label>
                                 <MultipleChoiceEditor
                                     questions={newAssessment.questions}
-                                    onChange={qs => setNewAssessment({ ...newAssessment, questions: qs })} />
+                                    onChange={qs => setNewAssessment(prev => ({ ...prev, questions: qs }))} />
                             </>
                         )}
                         {(newAssessment.type === '주관식 퀴즈' || newAssessment.type === '서답형') && (
@@ -807,7 +811,7 @@ const TeacherDashboard = () => {
                                 </label>
                                 <ShortAnswerEditor
                                     questions={newAssessment.questions}
-                                    onChange={qs => setNewAssessment({ ...newAssessment, questions: qs })}
+                                    onChange={qs => setNewAssessment(prev => ({ ...prev, questions: qs }))}
                                     type={newAssessment.type} />
                             </>
                         )}
@@ -817,14 +821,14 @@ const TeacherDashboard = () => {
 
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>예시문 (선택)</label>
                         <textarea placeholder="학생에게 보여줄 예시문이나 안내글을 입력하세요" value={newAssessment.refText}
-                            onChange={e => setNewAssessment({ ...newAssessment, refText: e.target.value })}
+                            onChange={e => setNewAssessment(prev => ({ ...prev, refText: e.target.value }))}
                             style={{ minHeight: '80px' }} />
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>참고 이미지 (선택)</label>
                         {newAssessment.refImageUrl && (
                             <div style={{ position: 'relative', display: 'inline-block' }}>
                                 <RefImage url={newAssessment.refImageUrl} style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '6px', border: '1px solid #ddd' }} />
                                 <button
-                                    onClick={() => setNewAssessment({ ...newAssessment, refImageUrl: '' })}
+                                    onClick={() => setNewAssessment(prev => ({ ...prev, refImageUrl: '' }))}
                                     style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#e57373', color: '#fff', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '12px', lineHeight: '1' }}
                                 >×</button>
                             </div>
@@ -841,10 +845,10 @@ const TeacherDashboard = () => {
                         {refImageUploading && <p style={{ fontSize: '0.8rem', color: '#888', margin: 0 }}>이미지 업로드 중...</p>}
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>만점 (선택)</label>
                         <input type="number" placeholder="예: 100" min="1" value={newAssessment.maxScore}
-                            onChange={e => setNewAssessment({ ...newAssessment, maxScore: e.target.value })} />
+                            onChange={e => setNewAssessment(prev => ({ ...prev, maxScore: e.target.value }))} />
                         <label style={{ fontSize: '0.85rem', color: '#666' }}>제출 기한</label>
                         <input type="datetime-local" value={newAssessment.deadline}
-                            onChange={e => setNewAssessment({ ...newAssessment, deadline: e.target.value })} />
+                            onChange={e => setNewAssessment(prev => ({ ...prev, deadline: e.target.value }))} />
                         <button className="btn-primary w-full" onClick={handleCreate}>저장 및 등록</button>
                     </div>
                 </div>
@@ -853,7 +857,7 @@ const TeacherDashboard = () => {
                 <div className="glass-card p-6">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                         <h3 style={{ margin: 0 }}>진행 중인 평가 목록</h3>
-                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value)}
+                        <select value={sortOrder} onChange={e => { const v = e.target.value; startTransition(() => setSortOrder(v)); }}
                             style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #ddd' }}>
                             <option value="default">등록 순</option>
                             <option value="deadline">마감일 순</option>
@@ -948,7 +952,7 @@ const TeacherDashboard = () => {
                             { id: 'stats', label: '점수 통계' },
                             { id: 'history', label: '학생별 이력' },
                         ].map(tab => (
-                            <button key={tab.id} onClick={() => setGradingTab(tab.id)}
+                            <button key={tab.id} onClick={() => startTransition(() => setGradingTab(tab.id))}
                                 style={{
                                     padding: '0.3rem 0.75rem', fontSize: '0.85rem', cursor: 'pointer', border: 'none',
                                     borderRadius: '4px 4px 0 0',

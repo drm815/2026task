@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './StudentPortal.css';
-
-const GAS_URL = '/api/gas';
+import { GAS_URL } from '../constants';
+import { cachedFetch } from '../gasCache';
 
 // 참고 이미지 표시 컴포넌트 (refimg:// → GAS에서 data URL 조회)
 const RefImage = ({ url }) => {
@@ -113,8 +113,7 @@ const StudentPortal = () => {
         const fetchAssessments = async () => {
             setIsLoading(true); setError('');
             try {
-                const res = await fetch(`${GAS_URL}?action=getAssessments`);
-                const data = await res.json();
+                const data = await cachedFetch(`${GAS_URL}?action=getAssessments`);
                 setAssessments(Array.isArray(data) ? data.filter(a => {
                     if (!a.IsPublic) return false;
                     if (!a.Grades || String(a.Grades).trim() === '') return true;
@@ -143,9 +142,7 @@ const StudentPortal = () => {
             } catch {}
         };
 
-        fetchAssessments();
-        fetchMySubmissions();
-        fetchMyScores();
+        Promise.all([fetchAssessments(), fetchMySubmissions(), fetchMyScores()]);
     }, [step]);
 
     // 1단계: 학번+이름 입력
@@ -293,12 +290,12 @@ const StudentPortal = () => {
                     <p>수행평가 제출을 위해 정보를 입력해주세요.</p>
                     <form onSubmit={handleLogin} className="input-group">
                         <div className="row">
-                            <input type="number" placeholder="학년" required value={studentInfo.grade} onChange={e => setStudentInfo({ ...studentInfo, grade: e.target.value })} />
-                            <input type="number" placeholder="반" required value={studentInfo.class} onChange={e => setStudentInfo({ ...studentInfo, class: e.target.value })} />
+                            <input type="number" placeholder="학년" required value={studentInfo.grade} onChange={e => setStudentInfo(prev => ({ ...prev, grade: e.target.value }))} />
+                            <input type="number" placeholder="반" required value={studentInfo.class} onChange={e => setStudentInfo(prev => ({ ...prev, class: e.target.value }))} />
                         </div>
                         <div className="row">
-                            <input type="number" placeholder="번호" required value={studentInfo.number} onChange={e => setStudentInfo({ ...studentInfo, number: e.target.value })} />
-                            <input type="text" placeholder="이름" required value={studentInfo.name} onChange={e => setStudentInfo({ ...studentInfo, name: e.target.value })} />
+                            <input type="number" placeholder="번호" required value={studentInfo.number} onChange={e => setStudentInfo(prev => ({ ...prev, number: e.target.value }))} />
+                            <input type="text" placeholder="이름" required value={studentInfo.name} onChange={e => setStudentInfo(prev => ({ ...prev, name: e.target.value }))} />
                         </div>
                         <button type="submit" className="btn-primary w-full">다음</button>
                     </form>
