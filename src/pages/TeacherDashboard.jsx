@@ -406,6 +406,79 @@ const TeacherDashboard = () => {
         fetchAssessments();
     }, [isAuthenticated]);
 
+    // ── 평가 Map 인덱스 (O(1) 탐색) ────────────────────────────────
+    const assessmentMap = useMemo(() => new Map(assessments.map(a => [a.ID, a])), [assessments]);
+
+    // ── 점수 통계 계산 ───────────────────────────────────────────────
+    const stats = useMemo(() => {
+        const scored = submissions.filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined && !isNaN(Number(s.Score)));
+        if (scored.length === 0) return null;
+        const nums = scored.map(s => Number(s.Score));
+        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+        return {
+            count: scored.length,
+            avg: avg.toFixed(1),
+            max: Math.max(...nums),
+            min: Math.min(...nums),
+        };
+    }, [submissions]);
+
+    // ── 미제출 학생 계산 ─────────────────────────────────────────────
+    const unsubmitted = useMemo(() => {
+        if (!selectedAssessment) return [];
+        const submittedKeys = new Set(submissions.map(s => `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`));
+        const allStudentKeys = new Set();
+        const allStudents = {};
+        allSubmissions.forEach(s => {
+            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
+            if (!allStudentKeys.has(key)) {
+                allStudentKeys.add(key);
+                allStudents[key] = { Grade: s.Grade, Class: s.Class, Number: s.Number, Name: s.Name };
+            }
+        });
+        const aGrades = selectedAssessment.Grades ? String(selectedAssessment.Grades).split(',').filter(Boolean) : [];
+        return Object.values(allStudents)
+            .filter(st => {
+                if (aGrades.length > 0 && !aGrades.includes(String(st.Grade))) return false;
+                return !submittedKeys.has(`${st.Grade}-${st.Class}-${st.Number}-${st.Name}`);
+            })
+            .sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
+    }, [submissions, allSubmissions, selectedAssessment]);
+
+    // ── 학생별 제출 이력 ─────────────────────────────────────────────
+    const studentHistory = useMemo(() => {
+        if (!historyStudent) return [];
+        return allSubmissions
+            .filter(s => s.Grade == historyStudent.Grade && s.Class == historyStudent.Class && s.Number == historyStudent.Number && s.Name === historyStudent.Name)
+            .map(s => ({ ...s, AssessmentTitle: assessmentMap.get(s.AssessmentID)?.Title || '(삭제된 평가)' }));
+    }, [historyStudent, allSubmissions, assessmentMap]);
+
+    // ── 평가 목록 정렬 ───────────────────────────────────────────────
+    const getSortedAssessments = useCallback((list) => {
+        if (sortOrder === 'deadline') {
+            return [...list].sort((a, b) => {
+                if (!a.Deadline) return 1;
+                if (!b.Deadline) return -1;
+                return new Date(a.Deadline) - new Date(b.Deadline);
+            });
+        }
+        if (sortOrder === 'title') {
+            return [...list].sort((a, b) => String(a.Title).localeCompare(String(b.Title), 'ko'));
+        }
+        return list;
+    }, [sortOrder]);
+
+    // 고유 학생 목록 (이력 조회용)
+    const uniqueStudents = useMemo(() => {
+        const seen = new Set();
+        return allSubmissions.filter(s => {
+            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
+    }, [allSubmissions]);
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setAuthError('');
@@ -678,79 +751,6 @@ const TeacherDashboard = () => {
         } catch { setError('서버 연결에 실패했습니다.'); }
         finally { setIsLoading(false); }
     };
-
-    // ── 평가 Map 인덱스 (O(1) 탐색) ────────────────────────────────
-    const assessmentMap = useMemo(() => new Map(assessments.map(a => [a.ID, a])), [assessments]);
-
-    // ── 점수 통계 계산 ───────────────────────────────────────────────
-    const stats = useMemo(() => {
-        const scored = submissions.filter(s => s.Score !== '' && s.Score !== null && s.Score !== undefined && !isNaN(Number(s.Score)));
-        if (scored.length === 0) return null;
-        const nums = scored.map(s => Number(s.Score));
-        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-        return {
-            count: scored.length,
-            avg: avg.toFixed(1),
-            max: Math.max(...nums),
-            min: Math.min(...nums),
-        };
-    }, [submissions]);
-
-    // ── 미제출 학생 계산 ─────────────────────────────────────────────
-    const unsubmitted = useMemo(() => {
-        if (!selectedAssessment) return [];
-        const submittedKeys = new Set(submissions.map(s => `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`));
-        const allStudentKeys = new Set();
-        const allStudents = {};
-        allSubmissions.forEach(s => {
-            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
-            if (!allStudentKeys.has(key)) {
-                allStudentKeys.add(key);
-                allStudents[key] = { Grade: s.Grade, Class: s.Class, Number: s.Number, Name: s.Name };
-            }
-        });
-        const aGrades = selectedAssessment.Grades ? String(selectedAssessment.Grades).split(',').filter(Boolean) : [];
-        return Object.values(allStudents)
-            .filter(st => {
-                if (aGrades.length > 0 && !aGrades.includes(String(st.Grade))) return false;
-                return !submittedKeys.has(`${st.Grade}-${st.Class}-${st.Number}-${st.Name}`);
-            })
-            .sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
-    }, [submissions, allSubmissions, selectedAssessment]);
-
-    // ── 학생별 제출 이력 ─────────────────────────────────────────────
-    const studentHistory = useMemo(() => {
-        if (!historyStudent) return [];
-        return allSubmissions
-            .filter(s => s.Grade == historyStudent.Grade && s.Class == historyStudent.Class && s.Number == historyStudent.Number && s.Name === historyStudent.Name)
-            .map(s => ({ ...s, AssessmentTitle: assessmentMap.get(s.AssessmentID)?.Title || '(삭제된 평가)' }));
-    }, [historyStudent, allSubmissions, assessmentMap]);
-
-    // ── 평가 목록 정렬 ───────────────────────────────────────────────
-    const getSortedAssessments = useCallback((list) => {
-        if (sortOrder === 'deadline') {
-            return [...list].sort((a, b) => {
-                if (!a.Deadline) return 1;
-                if (!b.Deadline) return -1;
-                return new Date(a.Deadline) - new Date(b.Deadline);
-            });
-        }
-        if (sortOrder === 'title') {
-            return [...list].sort((a, b) => String(a.Title).localeCompare(String(b.Title), 'ko'));
-        }
-        return list;
-    }, [sortOrder]);
-
-    // 고유 학생 목록 (이력 조회용)
-    const uniqueStudents = useMemo(() => {
-        const seen = new Set();
-        return allSubmissions.filter(s => {
-            const key = `${s.Grade}-${s.Class}-${s.Number}-${s.Name}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        }).sort((a, b) => a.Grade - b.Grade || a.Class - b.Class || a.Number - b.Number);
-    }, [allSubmissions]);
 
     return (
         <div className="teacher-dashboard fade-in">
