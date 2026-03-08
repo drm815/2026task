@@ -392,6 +392,15 @@ const TeacherDashboard = () => {
 
     const [, startTransition] = useTransition();
 
+    const fetchAssessments = async () => {
+        setIsLoading(true); setError('');
+        try {
+            const data = await cachedFetch(`${GAS_URL}?action=getAssessments`);
+            setAssessments(Array.isArray(data) ? data : []);
+        } catch { setError('평가 목록을 불러오지 못했습니다.'); }
+        finally { setIsLoading(false); }
+    };
+
     useEffect(() => {
         if (!isAuthenticated) return;
         fetchAssessments();
@@ -424,15 +433,6 @@ const TeacherDashboard = () => {
             </div>
         );
     }
-
-    const fetchAssessments = async () => {
-        setIsLoading(true); setError('');
-        try {
-            const data = await cachedFetch(`${GAS_URL}?action=getAssessments`);
-            setAssessments(Array.isArray(data) ? data : []);
-        } catch { setError('평가 목록을 불러오지 못했습니다.'); }
-        finally { setIsLoading(false); }
-    };
 
     const fetchSubmissions = async (assessment) => {
         setSelectedAssessment(assessment); setSubmissions([]); setAllSubmissions([]); setCheckedRows({});
